@@ -1,0 +1,32 @@
+#!/bin/sh
+# 랩 공용 pre-commit — 개인정보·자격증명이 «이력에 들어가기 전에» 막는다.
+#
+# 설치: install.ps1 이 걸어 준다. 손으로 하려면 기기당 한 번:
+#     git config --global core.hooksPath "<이 폴더의 절대경로>"
+# 해제:
+#     git config --global --unset core.hooksPath
+#
+# 왜 여기 있나. agent/tools/precommit_scan.py 는 «커밋 전에 훑는다»고 자기 머리말에 적어두고도
+# 그것을 부르는 것이 없었다(2026-08-20 확인: 어느 저장소에도 pre-commit 훅이 없었다).
+# 검사를 «순간»에 묶지 않으면 기억에 의존하고, 기억은 개인정보를 지키기에 충분하지 않다.
+# 한 번 커밋되면 이력에서 지우기가 매우 어렵다 -- 그래서 들어가기 전이 유일하게 싼 지점이다.
+#
+# ⚠️ 도구나 python이 없으면 «통과»시킨다(fail-open). 다른 기기나 클론에서 모든 커밋이 막히면
+# 사용자는 훅 자체를 꺼버리고, 꺼진 가드는 없는 가드다. 적발했을 때만 rc!=0으로 막는다.
+# 급할 때 우회: git commit --no-verify  (단, 우회한 이유를 커밋 메시지에 남길 것)
+
+# ⚠️ 경로를 박지 않는다 -- 박으면 다른 기계·다른 클론에서 «조용히 통과»한다.
+# 이 훅 자신의 위치에서 찾는다. 레이아웃이 둘이다:
+#   정본 저장소  <repo>/claude-config/githooks/pre-commit  -> <repo>/agent/tools/
+#   공개 킷      <repo>/githooks/pre-commit                -> <repo>/tools/
+HOOKDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCAN=""
+for c in "$HOOKDIR/../../agent/tools/precommit_scan.py" \
+         "$HOOKDIR/../tools/precommit_scan.py"; do
+    [ -f "$c" ] && { SCAN="$c"; break; }
+done
+
+[ -n "$SCAN" ] || exit 0
+command -v python >/dev/null 2>&1 || exit 0
+
+python "$SCAN"

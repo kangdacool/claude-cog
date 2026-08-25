@@ -172,6 +172,35 @@ if ($todo.Count -gt 0) {
     } }
 }
 
+# ── 3b. git pre-commit (개인식별정보가 이력에 들어가기 «전에» 막는다) ──────
+# 한 번 커밋되면 이력에서 지우기가 매우 어렵다 -- 들어가기 전이 유일하게 싼 지점이다.
+# 실사고 2026-08-25: 환자 성명이 프로젝트 메모리에 6일 있었다.
+Head "git pre-commit"
+$ghDir = Join-Path $ROOT "claude-config\githooks"
+if (-not (Test-Path $ghDir)) { $ghDir = Join-Path $ROOT "githooks" }
+if (-not (Test-Path (Join-Path $ghDir "pre-commit"))) {
+    Say "pre-commit 파일이 없습니다 -- 건너뜁니다"
+} elseif (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Say "git 을 찾을 수 없습니다 -- 건너뜁니다"
+} else {
+    $want = ($ghDir -replace '\\', '/')
+    $curHP = (git config --global --get core.hooksPath) 2>$null
+    if ($curHP -eq $want) {
+        Say "이미 걸림 (core.hooksPath)"
+    } elseif ([string]::IsNullOrWhiteSpace($curHP)) {
+        Say "전역 core.hooksPath 를 이 저장소로 겁니다: $want"
+        Say "  (해제: git config --global --unset core.hooksPath)"
+        $changes += @{ what = "git pre-commit"; act = {
+            git config --global core.hooksPath $want
+        }.GetNewClosure() }
+    } else {
+        # ⚠️ 남의 설정을 덮지 않는다. 이미 쓰는 훅이 있으면 그쪽이 우선이다.
+        Write-Warning ("core.hooksPath 가 이미 다른 곳을 가리킵니다: $curHP`n" +
+                       "  덮지 않았습니다. 두 훅을 합치려면 그 폴더의 pre-commit 에서 " +
+                       "$want/pre-commit 을 호출하십시오.")
+    }
+}
+
 # ── 4. 적용 ────────────────────────────────────────────────────────────────
 Head "요약"
 if ($changes.Count -eq 0) { Say "바꿀 것이 없습니다 -- 이미 물려 있습니다."; }
@@ -199,7 +228,10 @@ Say ("CLAUDE.md 스텁: {0}" -f $(if ($stubOk) { "OK" } else { $fail++; "실패"
 
 foreach ($t in @("hooks/heredoc_guard_selftest.py",
                  "hooks/docx_kit_guard_selftest.py",
-                 "skills/docx-editing/scripts/docx_kit_selftest.py")) {
+                 "skills/docx-editing/scripts/docx_kit_selftest.py",
+                 # 개인식별정보 게이트 -- 회귀 사례가 실제로 샜던 문장이다
+                 "../agent/tools/precommit_scan_selftest.py",
+                 "../tools/precommit_scan_selftest.py")) {
     $p = Join-Path $CFG $t
     if (-not (Test-Path $p)) { continue }
     & python $p *> $null

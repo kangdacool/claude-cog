@@ -67,7 +67,7 @@ else:                                   # 못 찾아도 죽지 않는다 -- 훅�
 # 그 상태로 두면 .md를 고칠 때마다 우는 훅이 되고, 우는 훅은 하루 만에 꺼진다.
 # 원고 소스(.md/.tex)는 .docx로 빌드될 때 이 훅을 다시 지나가므로 «놓치는» 것도 아니다.
 # .xlsx/.csv도 제외 — 산출물이 아니라 «입력 자료원»이다(audit.py의 data 장르).
-# 필요하면 손으로: python agent/tools/audit.py <파일>
+# 필요하면 손으로: python <이 저장소>/tools/audit.py <파일>
 EXTS = (".pptx", ".docx", ".hwpx")
 
 QUOTED = [re.compile(r'"([^"]+?\.(?:pptx|docx|hwpx))"'),
@@ -163,7 +163,8 @@ def main():
             print("    %s" % ln, file=sys.stderr)
         for ln in detail:
             print("    %s" % ln.strip()[:150], file=sys.stderr)
-    print("\n  전체 출력(느린 검사 포함): python agent/tools/audit.py <파일>", file=sys.stderr)
+    # 경로를 «해결된 것»으로 찍는다 -- 레이아웃이 둘이라 문자열로 박으면 한쪽에서 틀린다.
+    print("\n  전체 출력(느린 검사 포함): python %s <파일>" % AUDIT, file=sys.stderr)
     return 2                                        # stderr가 Claude에게 전달된다
 
 

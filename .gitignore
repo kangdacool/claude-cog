@@ -1,3 +1,7 @@
+# Python
+__pycache__/
+*.py[cod]
+
 # OS / cloud-sync cruft
 .DS_Store
 Thumbs.db

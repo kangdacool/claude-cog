@@ -1,0 +1,618 @@
+# CLAUDE.md — 연구실 운영 규약 (템플릿)
+
+> 이 파일을 각자의 정본으로 복사해 쓰십시오. 아래 **[채우기]** 표시가 붙은 곳만
+> 자기 환경으로 바꾸면 나머지는 그대로 돌아갑니다.
+> 방법론의 «왜»는 `docs/claude-operating-guide.md` 에 있습니다.
+
+## ⚠️ SESSION START PROTOCOL (매 세션 필수 — 코드 한 줄 쓰기 전에)
+
+**1단계: 메모리 읽기**
+```
+Read  <memory>/feedback/CORE.md          만성 편향·하드 게이트·작업별 인덱스
+Read  <memory>/MEMORY.md                 전역 인덱스
+Read  <memory>/projects/<project>/MEMORY.md
+```
+
+**2단계: 작업 유형별 규칙 파일 읽기** — CORE.md 의 인덱스가 「이 작업엔 무엇을 여는가」를
+가집니다. 그 인덱스가 상시 로딩 비용을 대신하는 장치이므로, 규칙 전문을 여기 옮겨 적지
+마십시오. 각 세션은 «그 작업의 묶음»만 읽습니다.
+
+**이 프로토콜을 건너뛰면 이미 해결된 문제를 다시 만듭니다 — 여러 차례 증명됐습니다.**
+
+> **[채우기] 메모리 위치.** 하네스 기본 per-project 경로가 아니라 **동기화되는 한 폴더**를
+> 정본으로 두십시오(예: 클라우드 드라이브의 `claude-kb/`). 인덱스 하나 + 주제별 노트
+> (`feedback/`, `reference/`, `projects/<name>/`) 구조를 권합니다.
+
+## 메모리 쓰기 규칙
+
+- **교훈 = 규칙 + 그것을 낳은 사실 한두 줄.** 사건의 «경위»는 git 이력·세션 로그에 두고
+  여기엔 «무엇을 하라»와 «왜 그게 참인지 아는가»만 씁니다. 서사 재구성은 다음 세션이 안 읽습니다.
+- **인덱스 항목은 «훅»이다 — 무엇이고 언제 여는가까지.** 내용 요약을 넣지 마십시오.
+  "이렇게 적어두면 파일을 안 열어도 되겠지"가 그 내용을 **항상 읽는 경로**에 올려놓습니다.
+- **도구를 만들었으면 도구가 자기를 설명하게 한다.** 사용법·함정·설계 근거는 그 파일 머리말에.
+  인덱스에 쓰면 그 도구를 안 쓰는 모든 세션이 값을 치릅니다.
+- ⚠️ **각 세션은 자기가 유일한 기여자인 것처럼 씁니다** — 세 시간 걸려 안 것을 그 밀도로
+  적습니다. 같은 날 다른 세션 열둘이 같은 짓을 하고 있다는 것은 안 보입니다. 그래서 형태를
+  규칙으로 둡니다. 예산 게이트는 `tools/memory_health.py` 가 셉니다(파일당·작업묶음당).
+
+## [채우기] 작업 디렉토리 → 프로젝트 매핑
+
+세션이 「지금 어느 프로젝트인가」를 경로로 판정하게 하는 표입니다. 프로젝트가 늘면 한 줄씩
+더하십시오. 훅이 아니라 **이 표가** 맥락 복구의 첫 단추입니다.
+
+| 작업 디렉토리 패턴 | 프로젝트 메모리 폴더 |
+|---|---|
+| `research/cohort-a` | `projects/cohort-a/` — 세션 시작 시 `SESSION_LOG.md` 필수 |
+| `research/methods-paper` | `projects/methods-paper/` — ⚠ 부모 원고 투고 전에는 착수하지 않는다 |
+
+> 각 항목에 **그 프로젝트에서만 참인 주의사항**을 한 줄로 답니다("되짚지 말 것" 류).
+> 그것이 이 표의 값어치입니다 — 경로 매핑 자체는 부수입니다.
+
+---
+
+## Code Quality Rules
+
+- **Always write code in numbered, well-defined sections** consistent with the style of the surrounding file
+- **Always double-check code correctness** before presenting it — logic, variable names, control flow
+- **Always verify function I/O:** confirm that input types/structures and output types/structures match actual usage at every call site
+- **Never fabricate variable operational definitions (categories, cutoffs, coding) from "standard-sounding" conventions.** Before writing Methods-section text describing covariate categories (BMI, physical activity, alcohol, education, income, periodontitis, etc.), OPEN the project's variable-definition script (typically `R/02_variable_definition.R`) and READ the exact `case_when()` / cut / factor levels. NHANES and other surveys do not have a single canonical scheme — the researcher may have coded BMI as 2-level (<30/≥30) or 3-level (<25/25–30/≥30), pacat/alc as 2-level dichotomies vs. 3-level, etc. Guessing propagates wrong descriptions into the manuscript.
+
+---
+
+## Manuscript Writing Rules (IMRaD discipline)
+
+When writing or editing any manuscript section, first identify which section it belongs to — **Introduction / Methods / Results / Discussion & Conclusion** — and keep content strictly within that section's scope:
+
+- **Introduction**: background, rationale, research gap, study aim. No methods, no results.
+- **Methods**: data source, variable operational definitions, statistical procedures. No results, no interpretation.
+- **Results**: dry factual reporting of numbers, directions, p-values, and figure/table callouts. No method restatement, no interpretation ("시사한다 / 나타낸다 / 반영한다 / 뒷받침한다" etc.), no prior-literature comparison, no citations beyond figure/table references. Stratified results should be explicitly compared back to the overall cohort.
+- **Discussion & Conclusion**: interpretation, comparison with prior studies, mechanisms, strengths/limitations, implications. Do not introduce new numerical results here.
+
+**Secondary vs sensitivity analysis distinction (for Q1 journals):**
+- **Secondary/supplementary analyses** answer distinct scientific questions (dose-response, subdomain/mechanism, subgroup/effect modification). Report as their own Results subsections.
+- **Sensitivity analyses** test whether the main result holds under different assumptions (alternative estimators, unmeasured confounding checks, positivity diagnostics, missing data, selection bias, competing risks). Group by what assumption they probe, not by when they were implemented.
+- Do NOT label dose-response or subdomain analyses as "sensitivity" — reviewers at Q1 journals distinguish these categories and mixing them signals unfamiliarity with the framework.
+- ⚠ **The parenthesised lists above are typical cases, not the test.** The same computation belongs in either bucket depending on the research question and on what the manuscript *does* with the result: a dose-response run to check whether a linear specification matters is a sensitivity analysis; one run because the shape is itself in question is secondary. Decide by function — **if the result carries an argument in Results/Discussion it is secondary; if it only shows the main result survives an assumption, it is sensitivity** — then label consistently. (2026-08-20: I read the example list as the rule and reclassified a project's stratified and subdomain analyses as "secondary", when that project's own pre-specification had framed them as robustness checks and claimed nothing from them.)
+
+Before writing any paragraph, check whether the content already appears in another section — if it does, remove the duplicate rather than restating. This applies both to the Korean (서론/방법/결과/고찰·결론) and English IMRaD framings.
+
+### Manuscript Version Control (NON-NEGOTIABLE)
+
+When a manuscript is rewritten for a different journal or undergoes a major model change:
+1. **ARCHIVE the old manuscript directory immediately** — move to `_archive/` or delete. Never leave two coexisting manuscript directories with different model runs.
+2. **Reassemble `manuscript_draft_*.md` after EVERY round of section-file edits.** Never leave the assembled draft stale.
+3. **Update the cover letter** after every substantive number change.
+4. **Before telling the user to send files for review**, verify that ALL files (text, tables, figures) come from the same directory and the same model run. Grep for key numbers (primary HR, mediation %, p-values) across all candidate files to confirm concordance.
+5. **Prefer sending a single assembled draft** rather than requiring the user to manually select 15+ files from the correct folder.
+
+---
+
+- **Section headers:** `##################################` / `#####  SECTION NAME  #####`
+- **Package loading:** define a `packages` vector → install missing → `lapply(library, character.only = TRUE)`
+- **Console feedback:** use `cat()` with `===` section markers and `---` step markers
+- **Error handling:** `tryCatch()` at pipeline/runner level; `stop()` inside scripts for unrecoverable missing data
+- **Checkpoint expensive operations:** Never wrap multiple expensive operations (10+ min each) in a single `tryCatch`. Save each result to disk immediately after completion (checkpoint RDS), so downstream failures don't discard upstream compute. Add fallback extraction for library functions that may fail intermittently (e.g., manual EIF extraction as fallback for `lmtp_contrast`). On resume, detect orphaned checkpoints and recover without re-running.
+- **Factor casting:** explicitly cast categorical variables at the top of each analysis script
+- **Date-stamped outputs:** all output files include `YYMMDD` (e.g., `table2_260331.xlsx`)
+
+Helper used across projects:
+```r
+excel_name <- function(file) {
+  paste0(file, format(Sys.Date(), "%y%m%d"), ".xlsx")
+}
+```
+
+---
+
+## Reference Verification Rule (2-Pass, Non-Negotiable)
+
+All references in any manuscript — whether existing or newly added — must undergo **2-pass verification** before submission. This is a hard rule that applies to every project.
+
+### Pass 1: Existence check (실존 검증)
+- Confirm the paper/book/report **exists** as cited (author list, title, journal, year, volume/issue/pages).
+- Record **PMID** (preferred) or **DOI**, and correct any bibliographic fields.
+
+### Pass 2: Content check (인용 내용 검증)
+- Confirm the **specific claim cited** is actually supported by that source (read at least abstract + relevant section).
+- Record 1–2 lines of **evidence** (quoted sentence, table/figure number, or page).
+
+### Rules
+- If either pass fails, the reference must be corrected or replaced.
+- Do NOT submit with "plausible but unverified" entries.
+- Claude must **never fabricate references**. If a reference is needed, propose candidates with PMID/DOI for the user to verify.
+- Track verification status in a `REFERENCE_VERIFICATION.md` file per project, using statuses: `UNVERIFIED` / `EXISTS_ONLY` / `EXISTS+CONTENT_OK` / `REPLACE`.
+
+---
+
+## Project Organization Pattern (Simple)
+
+Scripts are numbered sequentially and self-contained. Preferred naming order:
+
+```
+01_data_import
+02_variables            # Variable definition (exposure, outcome, confounders, DAG)
+03_selection             # Participant selection / filtering + flowchart
+04_descriptive           # Table 1 + exposure/outcome distributions
+05_assumptions           # Identification assumptions, diagnostics (GPS, positivity, SL)
+06_main_analysis         # Primary analysis (each script generates its own figures/tables)
+07_secondary             # Secondary analyses (07_2_subgroup, 07_3_dose_response, etc.)
+08_sensitivity           # Sensitivity analyses (08_2_ss1, 08_3_ss2, etc.)
+09_attrition             # Attrition / selection bias analysis
+...
+```
+
+Design principles:
+- Each script generates its own figures/tables — no separate "report" script needed
+- Diagnostics belong with the analysis they diagnose (MI diagnostics inside MI script, etc.)
+- Sub-steps use suffixed numbers: `07_2_subgroup.R`, `08_3_ss6_wavepair.R`
+
+Rules:
+- R scripts live in a subfolder named `R/`
+- **Every project must have a `.Rproj` file at the project root** for RStudio project detection and reproducibility
+- **All paths must be relative to the project root — never use absolute paths (a drive letter or `/home/...` at the start) or `setwd()` with absolute paths.** Use a `PROJ_ROOT` detection pattern in `00_config.R` (or `00_setup.R`) that finds the project root via `.Rproj` or `CLAUDE.md` marker files, then constructs all paths as `file.path(PROJ_ROOT, ...)`. This ensures the code runs on any machine without path edits.
+- Every project must have a **`variable_mapping.csv`** in `output/tables/` documenting all variables used in analysis: concept, raw variable name/pattern, waves available, coding/cutoffs, and notes. Create this during or immediately after the data preparation step. Keep it updated when variables are added, recoded, or dropped.
+- Scripts communicate via intermediate files (`.csv` or `.rda`) — no in-memory passing between scripts
+- Each script picks up the latest intermediate file by mtime — no hardcoded dates
+- Outputs are versioned by run date; old outputs are preserved, not overwritten
+- A master runner (`run_pipeline.R`) in `R/` calls each script via `source()` with `tryCatch()`
+- Sensitivity or supplementary analyses get suffixed numbers (e.g., `05_2_sensitivity.r`) or separate scripts
+- For multi-session projects, create a `SESSION_LOG.md` at the project root as a transient handoff document (what was done, what's pending, technical gotchas). Keep `CLAUDE.md` for stable project-level information only. Delete or archive `SESSION_LOG.md` after the project is complete.
+- **Session handoff rule:** At the end of any non-trivial session, **always** create or update `SESSION_LOG.md` with: (1) what was done this session, (2) what's pending/next steps, (3) data files kept and why, (4) technical notes (paths, env gotchas). This ensures the next session (or a different AI) can resume without re-investigation.
+
+**PROJ_ROOT detection template (for `00_config.R`):**
+```r
+.find_proj_root <- function() {
+  candidates <- c(getwd(), file.path(getwd(), ".."))
+  for (d in candidates) {
+    d <- normalizePath(d, mustWork = FALSE)
+    if (length(list.files(d, pattern = "\\.Rproj$")) > 0 ||
+        file.exists(file.path(d, "CLAUDE.md"))) {
+      return(d)
+    }
+  }
+  normalizePath(file.path(getwd(), ".."), mustWork = FALSE)
+}
+PROJ_ROOT <- .find_proj_root()
+if (basename(getwd()) != "R" && dir.exists(file.path(PROJ_ROOT, "R"))) {
+  setwd(file.path(PROJ_ROOT, "R"))
+}
+```
+
+**Directory structure for every new project:**
+```
+project_root/
+├── project_name.Rproj
+├── R/
+│   ├── 00_config.R            # PROJ_ROOT detection + paths
+│   ├── run_pipeline.R         # Master runner
+│   ├── 01_data.R              # Load + merge raw data
+│   ├── 02_variables.R         # Variable definitions + DAG
+│   ├── 03_selection.R         # Filtering + flowchart
+│   ├── 04_descriptive.R       # Table 1 + distributions
+│   ├── 05_assumptions.R       # Positivity, GPS, SL diagnostics
+│   ├── 06_main.R              # Primary analysis
+│   ├── 07_subgroup.R          # Secondary (07_2_, 07_3_, ...)
+│   ├── 08_sensitivity.R       # Sensitivity (08_2_, 08_3_, ...)
+│   ├── 09_attrition.R         # Attrition analysis
+│   └── ...
+└── Output/
+    ├── tables/
+    └── figures/
+```
+
+---
+
+## Project Organization Pattern (Full Pipeline — for model development / multi-cohort studies)
+
+Use this pattern when the project involves: training + validation cohorts, multiple derived scores/clocks, model serialization, or ≥7 pipeline steps. Reference implementation: a biological-age model project.
+
+### Script Naming Convention
+
+```
+00_setup.R               # Shared utilities, paths, packages (sourced by all)
+01_data_import.R         # Download/parse raw data → data/raw/
+02_clean.R               # Merge, recode, filter → data/processed/*_clean_*.rds
+03–04_*.R                # Compute derived scores (e.g., PhenoAge, AnthropoAge)
+05_model_train.R         # Train model on training cohort → *_model_*.rds
+06_model_validate.R      # Apply model to validation cohort → *_final_*.rds
+07_main_analysis.R       # Primary analysis (Cox, classification, etc.)
+08_tables_figures.R      # Publication tables & figures
+09_sensitivity.R         # Sensitivity, subgroup, additional analyses
+run_all.R                # Master pipeline runner
+```
+
+### Rules
+
+- Every script starts with `source("R/00_setup.R")`
+- Scripts communicate **only** via date-stamped `.rds` files in `data/processed/`
+- `latest_file(dir, pattern)` auto-selects newest matching file — no hardcoded dates
+- Master runner (`run_all.R`) calls each script via `source()` wrapped in `tryCatch()`
+- Suffixed numbers for sub-steps: `05_2_sensitivity.R`
+
+### 00_setup.R Template
+
+```r
+proj_dir    <- detect_proj_dir()
+data_dir    <- file.path(proj_dir, "data")
+raw_dir     <- file.path(data_dir, "raw")
+proc_dir    <- file.path(data_dir, "processed")
+output_dir  <- file.path(proj_dir, "output")
+tables_dir  <- file.path(output_dir, "tables")
+pub_dir     <- file.path(output_dir, "tables", "publication")
+figures_dir <- file.path(output_dir, "figures")
+
+stamp <- format(Sys.Date(), "%y%m%d")
+
+excel_name  <- function(file) paste0(file, "_", stamp, ".xlsx")
+rds_name    <- function(file) paste0(file, "_", stamp, ".rds")
+latest_file <- function(dir, pattern) {
+  files <- list.files(dir, pattern = pattern, full.names = TRUE)
+  if (length(files) == 0) stop("No files matching '", pattern, "' in ", dir)
+  files[which.max(file.mtime(files))]
+}
+
+## ---- intermediate I/O: single source of truth (proc_dir), drift-proof ----
+## Scripts NEVER write .RData/.rds intermediates to output_dir. Use these helpers so the
+## directory cannot drift. envir = parent.frame() preserves save()/load() named-object semantics
+## (objects resolved in / loaded into the CALLING script's environment — pass named vars, e.g.
+## save_step(df03, name = "df_step03"); a bare expression like save_step(data.frame(...)) fails,
+## which is R's save() limitation, not the helper).
+step_path <- function(name) file.path(proc_dir, paste0(name, "_", stamp, ".RData"))
+save_step <- function(..., name) {
+  f <- step_path(name); save(..., file = f, envir = parent.frame())
+  message("Saved: ", f); invisible(f)
+}
+load_step <- function(pattern) {
+  f <- latest_file(proc_dir, pattern); load(f, envir = parent.frame())
+  message("Loaded: ", basename(f)); invisible(f)
+}
+## guard: intermediates must not leak into output/ (output/ = tables + figures only)
+.stray <- list.files(output_dir, pattern = "^df_step.*\\.RData$|_(clean|score|model|final)_.*\\.rds$")
+if (length(.stray)) warning("intermediate files found in output/ (belong in data/processed/): ",
+                            paste(.stray, collapse = ", "))
+```
+
+**Directory contract (NON-NEGOTIABLE):** `data/processed/` = intermediates (date-stamped `.RData`/`.rds`),
+`output/` = **코드가 다시 만들어내는 것**(표·그림), `logs/` = run logs.
+저작물(원고·발표덱·포스터·투고 패키지)은 `output/` 밑에 **두지 않는다** — 아래 「저작물 폴더」 절.
+Never write intermediates or logs into `output/`. Define `proc_dir` in setup and route all
+intermediate I/O through `save_step()`/`load_step()` so a script cannot silently write to the wrong
+place; the guard above flags leaks on every source. (2026-07-12, one project: `proc_dir` was defined
+but unused — 27 sites wrote/read `df_step*.RData` in `output/` — fixed by routing through helpers.)
+
+**Build-script portability:** Python build scripts (research brief / manuscript totale / PPT) compute
+`ROOT` from their own location — `ROOT = str(Path(__file__).resolve().parents[N])` (N = depth below
+root) — and NEVER hardcode an absolute machine path. This keeps them runnable on any machine and
+from any cwd. Verify by rebuilding after the change.
+
+### Directory Structure
+
+```
+project_root/
+├── R/
+│   ├── 00_setup.R
+│   ├── 01–09_*.R
+│   └── run_all.R
+├── data/
+│   ├── raw/                   # Downloaded source data (cached)
+│   └── processed/             # Date-stamped intermediate RDS
+│       ├── *_clean_YYMMDD.rds
+│       ├── *_model_YYMMDD.rds
+│       └── *_final_YYMMDD.rds
+├── output/                    # 지워도 되는 것 — run_all.R 이 되살린다
+│   ├── tables/
+│   │   └── publication/       # Manuscript-ready tables (.xlsx)
+│   └── figures/               # Publication plots (.png, 300 dpi)
+└── manuscript/                # 저작물. presentation/ poster/ submission/ 도 최상위
+```
+
+### Data Flow
+
+```
+01 → raw/*.rds
+02 → processed/*_clean_*.rds
+03–04 → processed/*_score_*.rds (cumulative columns)
+05 → processed/*_model_*.rds (trained model as named list)
+06 → processed/*_final_*.rds (all scores + classifications)
+07 → output/tables/*.xlsx
+08 → output/tables/publication/*.xlsx + output/figures/fig*.png
+09 → output/tables/publication/tableS*.xlsx + output/figures/figS*.png
+```
+
+### Model Object Convention
+
+Store trained models as a named list in a single `.rds`:
+```r
+model <- list(
+  fit_M = model_object, fit_F = model_object,  # sex-stratified fits
+  selected_vars = character_vector,
+  formula = formula_object,
+  inv_params_M = list(s, b0, b1),              # inversion parameters
+  var_map = data.frame(...)                     # variable mapping
+)
+saveRDS(model, file.path(proc_dir, rds_name("model")))
+```
+
+### Publication Output Naming
+
+- Main: `main_table1_*`, `fig1_*`, `fig2_*`
+- Supplementary: `tableS1_*`, `figS1_*`
+- All date-stamped
+
+---
+
+## Output Conventions
+
+```
+output/                      # 지워도 되는 것. run_all.R 이 되살린다
+├── tables/                  # Analysis result tables (.xlsx, .csv)
+│   └── publication/         # Manuscript-ready formatted versions
+└── figures/                 # Plots and visualizations (.png)
+```
+
+### 저작물 폴더 — `output/` 밑에 두지 않는다 (2026-08-21 확정)
+
+**판정 기준 한 줄: 지우고 파이프라인을 돌려서 돌아오면 `output/`, 아니면 최상위.**
+
+```
+project/
+├── R/  data/  logs/  references/   입력·코드
+├── notes/          내가 이해하려고 쓰는 문서 (산출물이 아니다)
+├── output/         ★ 파생물 — 지워도 코드가 되살린다
+├── manuscript/     ★ 저작물 — 원고 소스(.md)와 그 빌드(.docx/.pdf)
+├── presentation/   ★ 발표덱 (.pptx)
+├── poster/         ★ 학회 포스터 — 덱과 **다른 장르**다
+└── submission/     ★ 저널이 받는 패키지: split 파일·커버레터·양식
+```
+
+**왜 «나가는 것」이 아니라 「되살아나는가」로 가르나.** `output/` 에 손으로 쓴 원고가 있으면
+**`output/` 을 지울 수 없고**, 「지우고 다시 돌려서 같은 게 나오나」는 파이프라인 재현성을
+확인하는 유일한 방법이다. 저작물은 지우면 작업이 사라진다 — 백업·판올림 요구가 근본적으로 다르다.
+
+- **폴더 이름이 곧 적용 규율이다.** `agent/tools/audit.py` 가 장르로 검사를 라우팅하고,
+  포스터와 덱은 규칙이 다른 장르다([[poster-rules]] ≠ [[ppt-rules]]).
+- **`submission/` 은 `manuscript/` 와 분리.** 단계가 아니라 포장 규칙이 따로 있다
+  ([[submission-packaging]]).
+- **빌드 산출물은 소스 옆에 둔다.** `manuscript/*_totale_*.docx` 는 생성물이지만 소스와 같은
+  폴더가 찾기 쉽다. 대신 그 폴더 README 에 「소스는 저작물, `*_totale_*` 는 재빌드 가능」을 적는다.
+- ⚠ **적용 범위: 새 프로젝트부터.** 기존 프로젝트를 옮기면 스크립트 경로가 깨진다.
+  실측 2026-08-21: 한 연구실의 관례가 반반으로 갈려 있었다 — 절반은 `output/` 밑에,
+  절반은 최상위에 저작물을 두고 있었다. 그래서 판정 기준을 한 줄로 못 박았다.
+
+`run_pipeline.R`(또는 `run_all.R`) 마지막에 `sessionInfo()`를 `logs/sessionInfo_YYMMDD.txt`로
+저장한다. `lmtp`·`SuperLearner`처럼 버전 간 결과가 갈리는 패키지를 쓰는 파이프라인에서는
+"어느 버전으로 낸 숫자인가"가 재현의 전제다. 코드 공개 시 동봉한다.
+
+---
+
+## Output Surface Discipline (슬라이드·해설서·그림·논문 공통)
+
+**핵심 원칙:** 산출물은 '처음부터 그렇게 설계된 완성물'처럼 자신감 있는 선언형 톤으로 읽혀야 한다. 편집 지시 문구·선정 기준·AI 흔적·자명한 설명은 표면 텍스트(제목·캡션·콜아웃·불릿)에 넣지 않는다.
+
+**표면 체크 (생성 직후 전 문자열에 적용):**
+1. 청중이 주제에 대해 알게 되는 것인가, 내 편집의 해명인가? → 후자면 삭제
+2. 이전 버전 없이 처음 만들었어도 이 문장이 여기 있을까? → 아니면 제거
+
+세부 규칙(편집 지시 반영·전문가 청중·AI 흔적·그림 범례) → `docs/claude-operating-guide.md` §6
+
+---
+
+## PPT Generation (python-pptx)
+
+When generating PowerPoint presentations with python-pptx:
+
+### Data integrity (NON-NEGOTIABLE)
+
+1. **Never type a number from memory.** Every statistic on every slide must be traced to a specific source file (xlsx, csv, or manuscript .md) and extracted by reading that file — either programmatically with openpyxl/pandas in the Python script, or by reading the file first and copy-pasting the exact value. "Approximately 1.38" or "around 0.03" is fabrication. If you cannot find the source file for a number, flag it to the user — do not guess.
+2. **Read source tables BEFORE writing the script, not after.** Before writing any slide's content, read the authoritative output table(s) that the slide will reference. Extract the exact values, then write the slide code. Never write slide content first and "plan to verify later" — that verification step gets skipped or done superficially.
+3. **Narrative must match numbers.** When a statistic changes direction, significance, or magnitude, every interpretive sentence that references it must also change. "Stronger in females" is wrong if the ORs are 1.39 vs 1.39. "Significant interaction" is wrong if p=0.324. Audit the story, not just the digits.
+4. **Post-generation number audit.** After the PPT is generated, systematically verify every number on every slide against its source. This is a separate step from generation — do not skip it. A quick scan is not enough; line-by-line comparison is required. Prior experience: initial "verification" missed 20+ errors that a deep audit caught.
+
+### Figures and layout
+
+5. **Figures**: Embed actual figure files from `output/figures/` or `output/submission/`; verify paths exist before inserting
+6. **Image sizing**: Use PIL to read image dimensions; fit within a bounding box that respects slide boundaries (`max_h = slide_height - top - 0.2`, `max_w = slide_width - left - 0.2`); preserve aspect ratio
+7. **Post-generation overflow check**: Programmatically verify all pictures fit within slide boundaries (`bottom = top + height < slide_height`); report any overflows before delivering
+
+### Structure and design
+
+8. **Template**: Use an existing project PPT as template (loads theme/master slides), then clear all slides and build fresh
+9. **Design**: Colored title bar (dark blue `#1F4E79`) + white body + light-colored info boxes (`#E8F0F8` blue, `#FDF0F0` red) for structure; keep minimal
+10. **Slide structure**: Match the lab's established format — Title, section dividers (full-color background), content slides with title bar, slide numbers
+11. **Script retention**: Save the `create_ppt.py` script in `presentation/` for reproducibility and future regeneration
+
+---
+
+## Publication Table Pattern
+
+When building regression/summary tables for manuscripts, use the `header_row` + `build_row` pattern:
+
+```
+Variable                    Crude              Model 1 (adjusted)
+Active use
+  No                        1.00 (ref)         1.00 (ref)
+  Yes                       1.xx (x.xx-x.xx)*  1.xx (x.xx-x.xx)*
+```
+
+**Helper functions:**
+```r
+header_row <- function(label, col_names = c("Variable", "Crude", "Model 1 (adjusted)")) {
+  out <- as.data.frame(matrix("", nrow = 1, ncol = length(col_names)))
+  names(out) <- col_names
+  out[[1L]] <- label
+  out
+}
+
+build_row <- function(label, crude_str, adj_str) {
+  data.frame(
+    Variable = label,
+    Crude = crude_str,
+    `Model 1 (adjusted)` = adj_str,
+    stringsAsFactors = FALSE, check.names = FALSE
+  )
+}
+
+# Assemble:
+table_formatted <- do.call(rbind, list(
+  header_row("Active use"),
+  build_row("  No",  crude_no,  adj_no),
+  build_row("  Yes", crude_yes, adj_yes)
+))
+```
+
+**RData standalone fallback:** when a table script may be run from a saved `.RData` without the full pipeline, add fallbacks for objects only defined upstream:
+```r
+if (!exists("Zvar")) {
+  Zvar <- c("sex", "age", "edu", ...)  # project-specific default
+}
+```
+
+---
+
+## Statistical Reporting Format
+
+- **Estimates and CI:** 2 decimal places — `1.23 (0.98–1.56)`
+- **P-values:** `p=0.032` / `p<0.001`
+- **Reference category:** `1.00 (ref)`
+- **Significance stars:** `*` p<0.05, `**` p<0.01, `***` p<0.001
+
+## Missing Data
+
+- Default approach: **complete case analysis** — exclusions applied in the filtering step and documented in the STROBE flowchart
+- Any deviation (e.g., imputation, sensitivity with missing indicators) must be explicitly specified
+
+### Multiple Imputation Diagnostics Checklist
+
+When writing MI code (`mice` or equivalent), **always include diagnostics in the same script** so they are produced in one pass — do not defer to a separate diagnostics script.
+
+Required outputs for Q1 journal supplement:
+
+1. **Missingness summary table** — variable name, publication label, N observed, N missing, % missing. Save as CSV/xlsx.
+2. **Save `mice` object as RDS** — enables later diagnostics without re-running imputation.
+3. **Trace plots (convergence)** — plot mean and SD across iterations for each chain, for key imputed variables. Chains should mix well (no trend, overlap). Save as PNG.
+4. **Density plots (observed vs imputed)** — overlay observed (blue) and imputed (red/orange) distributions for continuous variables. Large distribution shifts signal model misspecification. Save as PNG.
+5. **FMI (Fraction of Missing Information)** — report from pooled estimates. If FMI < 0.5, m=5 is adequate; if FMI >= 0.5, increase m (rule of thumb: m >= 100*FMI).
+
+Key implementation notes:
+- Use `quickpred(mincor = 0.1)` for predictor matrix in high-dimensional settings
+- Cast factors explicitly before imputation (binary, categorical, ordinal)
+- For trace plots, extract from `mice_obj$chainMean` / `mice_obj$chainVar` (dimensions: `[variable, iteration, imputation]`)
+- For density plots, pool imputed values across all m imputations via `mice_obj$imp[[var]]`
+
+---
+
+## Analysis Defaults
+
+- Survey-weighted methods (`survey` package: `svyglm`, `svycoxph`) when working with NHANES
+- Report crude, Model 1, Model 2 in regression tables
+- Age stratification is common — check which cutpoints apply per project
+- Prefer `writexl` / `openxlsx` for Excel output
+- **난수를 쓰는 단계는 시드를 박는다.** MI(`mice`), 부트스트랩, SuperLearner/TMLE의 CV fold,
+  `sample()` — 시드가 없으면 같은 코드가 같은 숫자를 내지 않는다. 스크립트 상단에 `set.seed()`를
+  두고 그 값을 로그에 남긴다. 원고에 실린 숫자를 다시 만들지 못하면 코드를 공개해도 재현이 아니다.
+
+---
+
+## Known R Pitfalls
+
+- **Do not use `dplyr::coalesce`** — causes crashes. Use base R alternatives instead:
+  ```r
+  # Instead of coalesce(x, y):
+  ifelse(is.na(x), y, x)
+  # or
+  x[is.na(x)] <- y[is.na(x)]
+  ```
+
+- **Closure scoping in `for` loops** — when creating functions inside a `for` loop, the loop variable is captured by reference. All iterations silently use the last value. Fix with an IIFE (Immediately Invoked Function Expression) + `force()`:
+  ```r
+  # WRONG — all shift_fn will use the final value of d and max_val:
+  for (d in deltas) {
+    shift_fn <- function(data, trt) pmin(data[[trt]] + d, max_val)
+  }
+
+  # CORRECT — each iteration gets its own copy:
+  for (d in deltas) {
+    shift_fn <- (function(dd, mx) {
+      force(dd); force(mx)
+      function(data, trt) pmin(data[[trt]] + dd, mx)
+    })(d, max_val)
+  }
+  ```
+  This applies to any pattern where closures are generated in loops: `lapply` with factory functions, custom shift/link functions for `lmtp`, callbacks, etc.
+
+- **Duplicate column names in SuperLearner / lmtp** — if a variable list passed to `lmtp_tmle()` (e.g., `time_vary`, `baseline`) contains duplicate column names, `predict.SuperLearner` fails with the cryptic error `[.data.frame(newdata, , object$varNames): undefined columns selected`. The error gives no hint about duplicates. Common cause: building variable vectors by concatenation where a name already exists (e.g., `c(l_cols(6), "dep_cesd_t6")` when `l_cols()` already includes `dep_cesd`). Always check `duplicated()` on variable lists before passing to lmtp/SuperLearner.
+
+- **Named vector propagation in arithmetic** — when a function returns a named scalar (e.g., `c(est = 0.297)`), arithmetic on it preserves the name. Then `c(stat = named_scalar)` produces `stat.est = 0.297` instead of `stat = 0.297`. Downstream `sapply(results, "[", "stat")` returns NA silently. Fix: use `unname()` at the top of any function that receives values from external sources and does arithmetic on them:
+  ```r
+  wald_test <- function(est1, se1, est2, se2) {
+    est1 <- unname(est1); se1 <- unname(se1)
+    est2 <- unname(est2); se2 <- unname(se2)
+    diff <- est1 - est2
+    # ...
+  }
+  ```
+
+- **`svykm` on large NHANES (N>15,000): NEVER use `se = TRUE`** — it crashes R on memory with multi-cycle survey designs. This has caused repeated session failures. Two safe alternatives:
+  - **For plots only** (no manual `$time`/`$surv` extraction): use `survfit()` with survey weights. This is fast and reliable:
+    ```r
+    km <- survfit(Surv(time, event) ~ group, data = df, weights = WTMECALL)
+    plot(km, conf.int = FALSE, col = c("blue", "red"))
+    ```
+  - **For CIs**: use `svykm(se = FALSE)` + PSU bootstrap (1000 reps). Note that `se = FALSE` returns an `approxfun` closure, NOT a list — `$time`/`$surv` will be NULL. Use `plot.svykm()` directly or the bootstrap approach.
+  - `svykm(se = TRUE)` is only safe on small datasets (N<5,000). On large NHANES it will segfault or exhaust memory.
+
+- **Em-dash / Unicode in `cat()` on Windows R** — `cat("text — more text")` with UTF-8 em-dashes (U+2014) can crash the R parser on Windows, especially after many warnings have accumulated from packages like SuperLearner. The error is cryptic: `unexpected symbol in "...)ull"`. Fix: always use plain ASCII dashes (`-` or ` - `) in `cat()` strings on Windows. This also applies to other Unicode characters in diagnostic messages.
+
+---
+
+## Causal Inference Patterns
+
+### Interaction tests for stratified causal estimates
+When running stratified TMLE (or any causal estimator) and reporting effect modification, use formal interaction tests:
+- **Binary modifier (2 strata):** Wald test: `z = (est1 - est2) / sqrt(SE1^2 + SE2^2)`, p = 2-sided normal
+- **3+ level modifier:** Cochran's Q test: `Q = sum((est_k - est_pooled)^2 / SE_k^2)`, df = K-1, chi-squared
+
+Both assume independent strata (separate TMLE fits). Always `unname()` inputs.
+
+### E-value for continuous outcomes
+Convert mean difference to approximate RR, then compute E-value:
+```r
+# VanderWeele & Ding (2017): RR ≈ exp(0.91 * MD / SD_pooled)
+rr <- exp(0.91 * mean_diff / sd_outcome)
+evalue <- rr + sqrt(rr * (rr - 1))
+# For CI bound: if RR_lo < 1, E-value = 1 (effect could be null)
+```
+
+### Focused runner scripts for expensive re-runs
+When a pipeline has steps that take 10+ minutes (e.g., TMLE with SuperLearner), create standalone `_run_*.R` scripts that load cached results and re-run only the needed section. Prefix with `_` to distinguish from numbered pipeline scripts. These are not called by `run_pipeline.R`.
+
+---
+
+## Debugging
+
+When debugging code that previously worked, ALWAYS do a line-by-line comparison of the working version vs the failing version. Check:
+- Variable names
+- Function calls
+- Data structures
+- How formulas/models are constructed and used (hardcoded vs stored in variables)
+
+Never assume the logic is identical — verify every detail.
+
+## Reasoning About Prior Runs
+
+When referencing prior run times, resource usage, or results to estimate future runs, ALWAYS verify what conditions the prior run actually used. A prior run may have used different settings (e.g., sequential vs parallel, different learner library, different N) than the current run. Do not carry over assumptions — check the log or code version that produced the prior result. Common mistakes:
+- Assuming a prior run used parallelism when it didn't (or vice versa)
+- Treating a prior run's wall time as a baseline without checking how many workers/cores were active
+- Forgetting that a code fix (e.g., enabling parallel, adding HAL) was made AFTER the prior run completed
+
+---
+
+## Collaboration Style
+
+- Keep responses concise and direct — no filler summaries
+- Prefer editing existing files over creating new ones
+- Do not add comments or docstrings to code that wasn't changed
+- When suggesting code, match the existing section-header and naming style
+- If something is unclear, ask rather than assume
+
+---

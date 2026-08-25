@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 선택적 의존은 «일부러» 최소로 깐다. 도구가 그것 없이도 import 되어야 한다 --
+      # 2026-08-25 에 Pillow 를 최상단에서 import 한 파일이 개발 기계에서만 돌았다.
+      - name: Install minimal deps
+        run: pip install python-docx python-pptx lxml
+
+      - name: 도구 구문 전수 검사
+        run: |
+          python - <<'PY'
+          import ast, glob, sys
+          bad = []
+          for f in glob.glob("tools/*.py") + glob.glob("hooks/*.py"):
+              try:
+                  ast.parse(open(f, encoding="utf-8").read())
+              except SyntaxError as e:
+                  bad.append(f"{f}:{e.lineno} {e.msg}")
+          print(f"검사 {len(glob.glob('tools/*.py') + glob.glob('hooks/*.py'))}개")
+          if bad:
+              print("\n".join(bad)); sys.exit(1)
+          PY
+
+      - name: 자기검사 전수 (절반은 «울리지 않는 것»의 증명)
+        run: |
+          set -e
+          fail=0
+          for t in tools/*_selftest.py hooks/*_selftest.py; do
+            [ -f "$t" ] || continue
+            if python "$t" > /tmp/out 2>&1; then
+              echo "OK   $t"
+            else
+              echo "FAIL $t"; tail -20 /tmp/out; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: 훅 매니페스트가 실재하는 파일을 가리키나
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          m = json.load(open("hooks/hooks.manifest.json", encoding="utf-8"))["hooks"]
+          missing = [h["script"] for h in m if not os.path.exists(os.path.join("hooks", h["script"]))]
+          print(f"훅 {len(m)}개 · 누락 {len(missing)}")
+          if missing:
+              print(missing); sys.exit(1)
+          PY
+
+      - name: 유출 스캔 (개인 경로·프로젝트명이 남았나)
+        run: |
+          python - <<'PY'
+          import re, sys
+          from pathlib import Path
+          LEAK = re.compile(
+              r"(?<![A-Za-z])[A-Za-z]:[\\/]|[\\/]onedrive[\\/]|교수님|센터장|병록번호|주민등록",
+              re.IGNORECASE)
+          OK = re.compile(r"C:\\(Windows|Program Files)|noleak", re.IGNORECASE)
+          hits = []
+          for p in list(Path("tools").rglob("*")) + list(Path("hooks").rglob("*")) + [Path("CLAUDE.md.template")]:
+              if not p.is_file() or p.suffix not in (".py", ".R", ".js", ".json", ".md"):
+                  continue
+              for i, line in enumerate(p.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+                  if not OK.search(line) and LEAK.search(line):
+                      hits.append(f"{p}:{i}  {line.strip()[:80]}")
+          print(f"유출 {len(hits)}건")
+          if hits:
+              print("\n".join(hits[:20])); sys.exit(1)
+          PY

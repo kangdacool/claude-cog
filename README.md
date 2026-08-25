@@ -1,63 +1,104 @@
-# Claude Operating Guide — 연구·문서 편집 운영 세트
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![works with: Claude Code & Claude.ai](https://img.shields.io/badge/works%20with-Claude%20Code%20%26%20Claude.ai-6C3EF5)
-![type: operating guide](https://img.shields.io/badge/type-operating%20guide-informational)
+# 🔬 Claude Operating Guide — 연구실 운영 킷
 
-_A portable operating guide + lean Claude Code adapter that biases Claude toward rigorous research and clean document/deck production._
+**한 연구실이 실제로 쓰는 Claude Code 세팅을 통째로.**
+방법론 문서 + 훅 + 서브에이전트 + 감사 도구 + 설치 스크립트.
 
-학술·정책·실무 문서를 자주 다루는 사람을 위해, Claude가 **보고서·해설서·슬라이드 덱을 만들고, 정보를 추출·검증하고, 자료를 조사하는** 방식을 더 엄밀하게 잡아주는 규칙 세트입니다. 특정 개인의 작업 기록에서 **방법론만 추출·익명화**했습니다.
+_The working Claude Code setup of a research lab: the operating guide, the hooks that
+enforce it, the audit tools that check the output, and a one-command installer._
 
-## 목차
+[![CI](https://github.com/kangdacool/claude-cog/actions/workflows/ci.yml/badge.svg)](https://github.com/kangdacool/claude-cog/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+![Works with](https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex%20%C2%B7%20Cursor%20%C2%B7%20Gemini-orange)
 
-- [무엇이 들어 있나](#무엇이-들어-있나)
-- [어떻게 쓰나 — 두 가지 경로](#어떻게-쓰나--두-가지-경로)
-- [핵심 규칙 미리보기](#핵심-규칙-미리보기-전문은-코어)
-- [도메인 레이어는 직접](#도메인-레이어는-직접)
-- [관련 프로젝트](#관련-프로젝트)
-- [Advanced: 여러 머신에 싱크하기](#advanced-선택-여러-머신에-싱크하기)
-- [라이선스](#라이선스)
+</div>
+
+---
+
+## 이게 무엇인가
+
+논문·보고서·발표덱을 만드는 연구실에서, 같은 실수가 반복되지 않도록 **규칙을 코드로
+바꿔 온 기록**입니다. 산문 가이드 하나가 아니라 네 층입니다.
+
+| 층 | 무엇 | 왜 |
+|---|---|---|
+| **가이드** | `docs/claude-operating-guide.md` (270줄) | 방법론의 «왜». 채팅 Claude 에 이 파일 하나만 첨부해도 동작합니다 |
+| **규약** | `CLAUDE.md.template` (618줄) | 상시 로딩되는 운영 규약. IMRaD 규율·참고문헌 2-pass·파이프라인 구조·통계 보고 서식 |
+| **훅** | `hooks/` (6개) | 규칙이 «지켜지게» 만드는 장치. 산출물이 나오면 감사를 자동으로 돌리고, 조용히 망가지는 명령을 막습니다 |
+| **도구** | `tools/` (43개) | 감사 19 · 규율 8 · 제작 5 · R 5 · 유틸 4 + 자기검사 |
+
+**한 줄 요약: 자주 일어나고 조용히 틀리는 것은 규칙이 아니라 검사로 막습니다.**
+규칙으로 다섯 번 실패한 명령 형태가 훅을 걸고 나서야 멈췄습니다 — 그 경험이 이 저장소의 뼈대입니다.
+
+## 설치
+
+```powershell
+git clone https://github.com/kangdacool/claude-cog
+cd claude-cog
+pwsh -File install.ps1 -WhatIf     # 무엇이 바뀌는지만 본다
+pwsh -File install.ps1             # 묻고 적용
+```
+
+`~/.claude` 의 셋만 건드리고 **전부 백업**합니다 — `CLAUDE.md` 스텁 · `skills`/`agents` 정션 ·
+`settings.json` 의 훅(**병합**이라 기존 설정과 남의 훅이 보존됩니다). 멱등이라 다시 돌려도
+「바꿀 것이 없습니다」로 끝납니다. 자세한 것은 [`SETUP.md`](SETUP.md).
+
+> Windows 전용입니다(정션 + PowerShell). 다른 OS라면 `hooks/hooks.manifest.json` 을 보고
+> 심볼릭 링크로 같은 것을 걸면 됩니다 — 도구 자체는 OS를 가리지 않습니다.
+
+**채팅 Claude 에서 쓰려면** `docs/claude-operating-guide.md` 한 파일만 첨부하고
+*"이 가이드의 규칙을 따라 작업해줘"* 라고 하십시오. 그게 전부입니다.
 
 ## 무엇이 들어 있나
 
 ```
-docs/claude-operating-guide.md   ← 정본 코어(spine). 이 한 파일이 방법론 전부
-CLAUDE.md                        ← Claude Code용 lean 어댑터(상시 규칙 요약 + 코어 지시)
-.claude/skills/                  ← 워크플로 포인터 스텁 — cross-verify · download-refs ·
-                                   hwpx-editing · pptx-editing · docx-editing
-.claude/agents/hwpx.md           ← 한글 편집 서브에이전트 포인터
-NOTES.md                         ← 출처·범위(무엇을 뺐는지)
+docs/claude-operating-guide.md   방법론 정본 — 이 한 파일이 «왜»의 전부
+CLAUDE.md                        Claude Code 용 lean 어댑터(상시 규칙 요약)
+CLAUDE.md.template               [채우기] 자리를 채워 자기 연구실 규약으로
+hooks/                           훅 6개 + 매니페스트 + 자기검사
+tools/                           감사·규율·제작 도구 43개
+.claude/skills/                  워크플로 포인터 (아래 «문서 포맷 스킬»)
+.claude/agents/                  서브에이전트 5 — 원고감사·파이프라인감사·문헌조사 등
+install.ps1  SETUP.md            설치와 되돌리기
 ```
 
-## 어떻게 쓰나 — 두 가지 경로
+### 훅 — 규칙이 지켜지게 만드는 층
 
-**1) 대화형 Claude(웹/앱 채팅)에서:**
-작업 시작 대화에 **`docs/claude-operating-guide.md` 한 파일만 첨부**하고 *"이 가이드의 규칙을 따라 작업해줘"* 라고 요청하세요. 그게 전부입니다.
+| 훅 | 언제 | 무엇을 막나 |
+|---|---|---|
+| `deliverable_guard.py` | 산출물(.docx/.pptx/.hwpx)이 만들어질 때 | 조판 결함이 그대로 나가는 것. 장르별 감사를 자동으로 돌립니다 |
+| `heredoc_guard.py` | Bash 실행 전 | 조용히 망가지거나 **셸이 영원히 멈추는** 명령 형태 |
+| `docx_kit_guard.py` | 문서 조립 코드를 쓸 때 | 이미 있는 도구를 못 찾고 다시 짜는 것 |
+| `log-*.js` (3) | 프롬프트·계획·응답 종료 | 무엇을 시켰고 어떤 모델이 답했는지 세션 로그로 |
 
-**2) Claude Code(CLI/IDE)에서:**
-`CLAUDE.md` + `.claude/` + `docs/`를 프로젝트 루트(또는 `~/.claude/`)에 복사하세요. CLAUDE.md가 상시 로딩되며 코어를 가리키고, 스킬들은 description으로 트리거됩니다. `/memory`로 로딩을 확인하세요.
+**막지 않고 알리는 훅이 있습니다.** 막으면 그때 훅을 끄게 되고, 꺼진 가드는 없는 가드입니다.
 
-## 핵심 규칙 미리보기 (전문은 코어)
+### 도구 — 산출물을 «사람 눈으로 보기 전에» 거르는 층
 
-- 납품은 **편집 가능한 파일만** — PDF는 QA용 중간물.
-- **렌더 후 눈으로** 확인(네이티브 해상도·폰트 최소크기·0바이트 PNG 체크). 코드 성공 ≠ 결과물 정확.
-- **상호참조 양방향 대조**, 번호 재배치는 단일 패스 원자적 remap.
-- **수치는 1차 출처**, 파일 간 grep 대조. **참고문헌 2-pass**(실존 + 인용 내용). 레퍼런스 날조 금지.
-- **표는 booktabs만**, 유의성은 색이 아니라 굵게. 장식·AI 티 금지.
-- **다중검정 '가족'은 함께 해석되는 가설의 집합** — 계산한 전부가 아니다. 무관한 주제까지 한 가족에 묶는 건 보수적인 게 아니라 비정합.
-- **결과변수를 씻기 전에 '살았나'를 판정하지 않는다** — 평범한 QC 두 줄로 판정이 뒤집힌다.
-- **검색에 없다 ≠ 자료에 없다** — 부재를 선언하기 전에 코드북의 '분류' 열을 센다.
-- **출력 표면 규율** — 편집 흔적·선정 기준을 산출물 표면에 남기지 않는다.
+단일 진입점 `tools/audit.py` 가 파일 장르(docx·pptx·hwpx·md·tex)로 검사를 라우팅하고,
+**건너뛴 검사와 그 이유까지** 보고합니다.
 
-## 도메인 레이어는 직접
+```bash
+python tools/audit.py 원고.docx        # 장르로 라우팅
+python tools/audit.py --list           # 장르 x 검사 전체 지도
+```
 
-이 코어는 **일반 방법론**만 담습니다. 특정 분야(예: 통계 코드 관례, 서식, 보고 형식) 규칙은 자신의 도메인 레이어에 두고 CLAUDE.md에서 가리키세요.
+글자 크기 · 칸 폭 · **인용되지 않은 표·그림** · 본문↔표 수치 일치 · 용어 충돌 ·
+낡은 파생 산출물 · 목표 저널 문체 적합 · 표면 유출(편집 흔적이 산출물에 새는 것).
 
-## 관련 프로젝트
+그 밖에 `memory_health.py`(교훈 코퍼스가 부풀지 않게) · `precommit_scan.py`(커밋 전
+개인식별정보 스캔) · `build_guard.py`(손편집을 재생성이 덮어쓰지 않게) ·
+`journal_display_census.py`(목표 지면의 **실제** 표·그림 규범을 세어 봅니다).
 
-이 저장소는 **방법론**이고, 문서 포맷을 실제로 다루는 **코드는 따로** 있습니다. 여기 있는
-`.claude/skills/*/SKILL.md`는 언제 무엇을 여는지 알려주는 «안내판»이고, 정본은 아래 셋입니다
-(전부 MIT, 규칙 + 도구 + 자기검사 + CI).
+**자기검사가 딸린 도구가 12개**이고, 그중 절반은 «울리지 않아야 하는 경우»를 증명합니다 —
+오탐이 많은 검사는 꺼지고, 꺼진 검사는 없는 검사이기 때문입니다.
+
+## 문서 포맷 스킬 — 코드는 따로 있습니다
+
+`.claude/skills/*/SKILL.md` 는 «언제 무엇을 여는가»를 알려주는 안내판이고, 실제로 도는
+코드는 아래 세 저장소입니다(전부 MIT, 규칙 + 도구 + 자기검사 + CI).
 
 | 포맷 | 저장소 | 무엇을 막아 주나 |
 |---|---|---|
@@ -65,45 +106,21 @@ NOTES.md                         ← 출처·범위(무엇을 뺐는지)
 | `.pptx` | **[`pptx-editing-skill`](https://github.com/kangdacool/pptx-editing-skill)** | 재빌드가 손편집·발표자 노트를 지우는 것, 경계 넘침 |
 | `.docx` | **[`docx-editing-skill`](https://github.com/kangdacool/docx-editing-skill)** | 줄마다 문단, 저널 표 세로줄, 렌더가 조용히 죽는 것 |
 
-⚠️ **새 포맷 스킬을 공개하면 이 표와 `CLAUDE.md`의 스킬 절에 함께 추가하세요.** 안 하면
-이 저장소가 «현관»인데 문패가 하나 빠진 상태가 됩니다(2026-08-25에 실제로 그랬습니다 —
-pptx·docx가 공개된 뒤에도 hwpx만 적혀 있었습니다).
+⚠️ **새 포맷 스킬을 공개하면 이 표와 `CLAUDE.md` 의 스킬 절에 함께 추가하십시오.**
+안 하면 이 저장소가 «현관»인데 문패가 하나 빠진 상태가 됩니다.
 
-## Advanced (선택): 여러 머신에 싱크하기
+## 무엇이 «없나» — 일부러
 
-데스크톱·노트북 등 여러 대에서 **같은 Claude Code 설정**을 쓰려면, 클라우드 동기화 폴더(OneDrive·Dropbox·iCloud 등)에 **정본 하나**를 두고 각 머신은 **얇은 링크만** 건다. 심링크 대신 `@import`를 쓰므로 **Windows에서 관리자 권한/Dev Mode가 필요 없다.**
+- **교훈 원문과 프로젝트 메모리.** 사람·기관·미발표 결과가 들어 있습니다.
+  `docs/claude-operating-guide.md` 가 그것의 익명화 증류본이고, 그게 옳은 구조입니다.
+- **기관 접근·개인 계정에 매인 도구**(브라우저 자동화·메일 발송·참고문헌 PDF 수집).
+- **특정 자료를 전제하는 분석 도구.** 남의 환경에서 안 돕니다.
 
-아래 `<CLOUD>` 는 클라우드 폴더의 **절대경로**로 바꿔라(예: `D:\cloud\claude-config`).
+## 도메인 레이어는 직접
 
-**1) 정본을 클라우드에 둔다** — `<CLOUD>\claude-config\` 안에 `CLAUDE.md`, `skills\`, `agents\` 배치.
-
-**2) 각 머신에서 한 번씩 링크** (기존 `~/.claude`의 해당 항목은 먼저 백업 후 삭제)
-
-Windows (PowerShell, 관리자 불필요):
-```powershell
-$claude = "$env:USERPROFILE\.claude"
-$cfg    = "<CLOUD>\claude-config"
-New-Item -ItemType Junction -Path "$claude\skills" -Target "$cfg\skills"
-New-Item -ItemType Junction -Path "$claude\agents" -Target "$cfg\agents"
-Set-Content "$claude\CLAUDE.md" "@<CLOUD>/claude-config/CLAUDE.md" -Encoding utf8
-```
-macOS / Linux:
-```bash
-claude="$HOME/.claude"; cfg="<CLOUD>/claude-config"
-ln -s "$cfg/skills" "$claude/skills"
-ln -s "$cfg/agents" "$claude/agents"
-printf '@%s/CLAUDE.md\n' "$cfg" > "$claude/CLAUDE.md"
-```
-
-**3) 절대 싱크하지 말 것 (머신 로컬 유지)**
-- `~/.claude/.credentials.json` — **인증 토큰**. 클라우드에 올리면 계정이 노출된다.
-- `history.jsonl`, `projects/`, `sessions/`, 각종 cache — 머신별 상태(충돌·비대 유발).
-
-**규율**
-- durable 규칙은 **정본(`<CLOUD>\claude-config\CLAUDE.md`)에서만** 편집한다. 각 머신의 `~/.claude/CLAUDE.md`는 `@import` 1줄 스텁이니 건드리지 않는다.
-- `@import`는 **절대경로**를 써라. `@~/...` 틸드 확장은 불안정하다.
-- 머신 전환 전 **클라우드 동기화 완료**를 확인한다. 새 세션에서 `/memory`로 로딩 확인.
+분야별 코딩 관례·문서 서식·통계 보고 규칙은 이 포터블 코어에 넣지 않습니다.
+자기 도메인 레이어(별도 전역 `CLAUDE.md`)에 두고 여기서 가리키십시오.
 
 ## 라이선스
 
-MIT — [`LICENSE`](LICENSE) 참조. 규칙은 기본값일 뿐이니 각자 맥락에 맞게 덮어써서 쓰라는 취지의 세트입니다.
+MIT — [LICENSE](LICENSE). 출처·범위는 [NOTES.md](NOTES.md).

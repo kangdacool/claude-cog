@@ -15,10 +15,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      # 선택적 의존은 «일부러» 최소로 깐다. 도구가 그것 없이도 import 되어야 한다 --
-      # 2026-08-25 에 Pillow 를 최상단에서 import 한 파일이 개발 기계에서만 돌았다.
-      - name: Install minimal deps
-        run: pip install python-docx python-pptx lxml
+      # matplotlib 은 flowchart_generator 의 «진짜» 필수 의존(그림을 그린다)이라 깐다.
+      # 반면 Pillow 처럼 «한 함수만» 쓰는 것은 일부러 안 깐다 -- 그래야 그 도구가
+      # 라이브러리 없이도 import 되는지 CI 가 계속 증명한다(2026-08-25 에 Pillow 를
+      # 최상단에서 import 한 파일이 개발 기계에서만 돌았다).
+      - name: Install deps
+        run: pip install python-docx python-pptx lxml matplotlib
 
       - name: 도구 구문 전수 검사
         run: |

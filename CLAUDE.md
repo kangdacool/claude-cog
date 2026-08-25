@@ -22,7 +22,14 @@
 
 - **cross-verify** — 문서 투고/납품 전 원고 수치를 원본 표와 대조.
 - **download-refs** — 원고 참고문헌 PDF 일괄 다운로드(기관 브라우저 접근 필요; 구현은 각자 환경).
-- **hwpx-editing** (+ `hwpx` 에이전트) — 한글 `.hwpx` 안전 편집. 정본은 공개 스킬 **`kangdacool/hwpx-editing-skill`** (MIT).
+
+**문서 포맷 스킬 셋** — 여기 있는 `SKILL.md`는 «안내판»이고 실제로 도는 코드는 각 공개 저장소에 있다(전부 MIT, 규칙 + 도구 + 자기검사 + CI). 파일을 만지기 **전에** 확보한다.
+
+| 포맷 | 스킬 | 정본 |
+|---|---|---|
+| 한글 `.hwpx` | **hwpx-editing** (+ `hwpx` 에이전트) | [`kangdacool/hwpx-editing-skill`](https://github.com/kangdacool/hwpx-editing-skill) |
+| `.pptx` | **pptx-editing** | [`kangdacool/pptx-editing-skill`](https://github.com/kangdacool/pptx-editing-skill) |
+| `.docx` | **docx-editing** | [`kangdacool/docx-editing-skill`](https://github.com/kangdacool/docx-editing-skill) |
 
 ## 도메인 레이어 (직접 채워 넣기)
 

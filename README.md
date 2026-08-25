@@ -23,7 +23,8 @@ _A portable operating guide + lean Claude Code adapter that biases Claude toward
 ```
 docs/claude-operating-guide.md   ← 정본 코어(spine). 이 한 파일이 방법론 전부
 CLAUDE.md                        ← Claude Code용 lean 어댑터(상시 규칙 요약 + 코어 지시)
-.claude/skills/                  ← 반복 워크플로 포인터 스텁 (cross-verify, download-refs, hwpx-editing)
+.claude/skills/                  ← 워크플로 포인터 스텁 — cross-verify · download-refs ·
+                                   hwpx-editing · pptx-editing · docx-editing
 .claude/agents/hwpx.md           ← 한글 편집 서브에이전트 포인터
 NOTES.md                         ← 출처·범위(무엇을 뺐는지)
 ```
@@ -54,7 +55,19 @@ NOTES.md                         ← 출처·범위(무엇을 뺐는지)
 
 ## 관련 프로젝트
 
-- 한글 `.hwpx` 안전 편집: **[`kangdacool/hwpx-editing-skill`](https://github.com/kangdacool/hwpx-editing-skill)** (MIT). 이 세트의 hwpx 스텁은 그 저장소를 정본으로 가리킵니다.
+이 저장소는 **방법론**이고, 문서 포맷을 실제로 다루는 **코드는 따로** 있습니다. 여기 있는
+`.claude/skills/*/SKILL.md`는 언제 무엇을 여는지 알려주는 «안내판»이고, 정본은 아래 셋입니다
+(전부 MIT, 규칙 + 도구 + 자기검사 + CI).
+
+| 포맷 | 저장소 | 무엇을 막아 주나 |
+|---|---|---|
+| 한글 `.hwpx` | **[`hwpx-editing-skill`](https://github.com/kangdacool/hwpx-editing-skill)** | 재압축·`linesegarray` 함정으로 한글이 파일을 못 여는 것 |
+| `.pptx` | **[`pptx-editing-skill`](https://github.com/kangdacool/pptx-editing-skill)** | 재빌드가 손편집·발표자 노트를 지우는 것, 경계 넘침 |
+| `.docx` | **[`docx-editing-skill`](https://github.com/kangdacool/docx-editing-skill)** | 줄마다 문단, 저널 표 세로줄, 렌더가 조용히 죽는 것 |
+
+⚠️ **새 포맷 스킬을 공개하면 이 표와 `CLAUDE.md`의 스킬 절에 함께 추가하세요.** 안 하면
+이 저장소가 «현관»인데 문패가 하나 빠진 상태가 됩니다(2026-08-25에 실제로 그랬습니다 —
+pptx·docx가 공개된 뒤에도 hwpx만 적혀 있었습니다).
 
 ## Advanced (선택): 여러 머신에 싱크하기
 

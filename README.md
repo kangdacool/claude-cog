@@ -95,16 +95,17 @@ python tools/audit.py --list           # 장르 x 검사 전체 지도
 **자기검사가 11개** 있고, 그중 절반은 «울리지 않아야 하는 경우»를 증명합니다 —
 오탐이 많은 검사는 꺼지고, 꺼진 검사는 없는 검사이기 때문입니다.
 
-## 문서 포맷 스킬 — 코드는 따로 있습니다
+## 문서 스킬 — 코드는 따로 있습니다
 
 `.claude/skills/*/SKILL.md` 는 «언제 무엇을 여는가»를 알려주는 안내판이고, 실제로 도는
-코드는 아래 세 저장소입니다(전부 MIT, 규칙 + 도구 + 자기검사 + CI).
+코드는 아래 네 저장소입니다(전부 MIT, 규칙 + 도구 + 자기검사 + CI).
 
 | 포맷 | 저장소 | 무엇을 막아 주나 |
 |---|---|---|
 | 한글 `.hwpx` | **[`hwpx-editing-skill`](https://github.com/kangdacool/hwpx-editing-skill)** | 재압축·`linesegarray` 함정으로 한글이 파일을 못 여는 것 |
 | `.pptx` | **[`pptx-editing-skill`](https://github.com/kangdacool/pptx-editing-skill)** | 재빌드가 손편집·발표자 노트를 지우는 것, 경계 넘침 |
 | `.docx` | **[`docx-editing-skill`](https://github.com/kangdacool/docx-editing-skill)** | 줄마다 문단, 저널 표 세로줄, 렌더가 조용히 죽는 것 |
+| 한국어 문장 (`.md` `.txt` `.docx` `.hwpx`) | **[`korean-prose-skill`](https://github.com/kangdacool/korean-prose-skill)** | 숫자 뒤 조사, 「의」 연쇄, 주술 불일치, 번역투 — 맞춤법 검사기는 통과하는 결함 |
 
 ⚠️ **새 포맷 스킬을 공개하면 이 표와 `CLAUDE.md` 의 스킬 절에 함께 추가하십시오.**
 안 하면 이 저장소가 «현관»인데 문패가 하나 빠진 상태가 됩니다.

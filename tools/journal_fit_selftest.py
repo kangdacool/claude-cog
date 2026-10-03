@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Selftest for journal_fit.strip_working_text.
 
-Why this exists (2026-08-24, teacher_ohs): the tool counted Korean working notes carried in
+Why this exists (2026-08-24, 한 원고): the tool counted Korean working notes carried in
 `<!-- ... -->` and reported em-dash at 29.7/10k, "ABOVE every paper", when the manuscript body
 held exactly one em-dash and that one sat inside a comment. A style measurement taken on text
 the author would never submit is worse than no measurement: it sends you rewriting prose that

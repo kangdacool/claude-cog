@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""한글(HWPX) COM 렌더 공용 헬퍼 — 자가치유형 보안모듈 등록.
+"""한글(HWPX) COM 렌더 공용 헬퍼 — 자가치유형 보안모듈 등록 + gen_py 캐시 복구.
 
 목적: 한글 COM 자동화 시 "파일 접근 허용" 보안창을 영구히 없앤다.
 원리: 유효한 FilePathCheckerModule.dll을 등록하면 RegisterModule이 True가 되어
@@ -72,7 +72,49 @@ class HwpSecurityModuleError(RuntimeError):
     """보안모듈 등록 실패. 경고가 아니라 «예외»인 이유는 아래 make_hwp() 참고."""
 
 
-def make_hwp(register=True, strict=True):
+def _ensure_dispatch(progid="HWPFrame.HwpObject"):
+    """gencache.EnsureDispatch + **gen_py 캐시 손상 자가치유**.
+
+    pywin32는 타입라이브러리를 `%LOCALAPPDATA%\\Temp\\gen_py`에 파이썬 모듈로 구워 둔다.
+    그게 깨지면(중단된 생성·파이썬 판올림·동시 실행) 다음처럼 터진다:
+
+        AttributeError: module 'win32com.gen_py.7D2B6F3C-...x0x1x0'
+                        has no attribute 'CLSIDToClassMap'
+
+    ⚠ **이걸 「한글이 없다/COM이 깨졌다」로 읽지 말 것.** 한글은 멀쩡하고 캐시만 썩은 것이다.
+    2026-09-11 실측: `audit_layout.py`가 이 예외로 죽어 「렌더 못 하니 --pdf를 넘기라」고
+    안내했고, 그대로 믿었으면 조판을 눈으로 못 본 채 문서를 보낼 뻔했다. 캐시를 지우니
+    같은 명령이 바로 렌더됐다. CORE §3의 「Word COM이 깨져 렌더 못 한다를 물려받지 마라」와
+    같은 병이라, 산문 규칙 대신 **코드로** 옮긴다.
+    """
+    import win32com
+    import win32com.client as win32
+    try:
+        return win32.gencache.EnsureDispatch(progid)
+    except (AttributeError, ImportError):
+        path = getattr(win32com, "__gen_path__", "")
+        if not path or not os.path.isdir(path):
+            raise
+        import sys
+        shutil.rmtree(path, ignore_errors=True)
+        # ① 이미 import된 캐시 모듈이 남아 있으면 디렉터리를 지워도 그 객체를 계속 쓴다.
+        #    ⚠ **`win32com.gen_py` «자신»은 지우지 말 것 — 하위 모듈만 지운다.**
+        #    그 패키지는 디스크에 없다. `win32com/__init__.py`가 import 시점에
+        #    `types.ModuleType("win32com.gen_py")`로 «합성»해 sys.modules에 꽂는다(119~127행).
+        #    그래서 한 번 지우면 이 프로세스에서는 두 번 다시 import되지 않고, 재생성이
+        #    `ModuleNotFoundError: No module named 'win32com.gen_py'`로 죽는다.
+        for name in [m for m in sys.modules if m.startswith("win32com.gen_py.")]:
+            del sys.modules[name]
+        # ② ⚠ `os.makedirs`로 빈 폴더만 만들면 안 된다 — gen_py는 «패키지»라 `__init__.py`가
+        #    없으면 재생성이 `ModuleNotFoundError: No module named 'win32com.gen_py'`로 죽는다.
+        #    (2026-09-11: 처음 짠 복구가 정확히 여기서 깨졌고, 예외를 주입한 시험에서 잡혔다.
+        #     시험을 안 했으면 «실사고 때만 실패하는» 복구 코드가 남을 뻔했다.)
+        #    `GetGeneratePath()`가 폴더와 `__init__.py`를 함께 만든다 — pywin32의 정규 경로다.
+        win32.gencache.GetGeneratePath()
+        return win32.gencache.EnsureDispatch(progid)
+
+
+def make_hwp(register=True, strict=True, auto_answer=True):
     """등록까지 마친 HwpObject 반환. RegisterModule True면 접근허용 창이 안 뜬다.
 
     ⚠️ **등록 실패는 경고가 아니라 기본적으로 예외다(strict=True).** 2026-08-18 실측:
@@ -89,8 +131,17 @@ def make_hwp(register=True, strict=True):
     `FilePathCheckerModule`이다. 이름이 다르면 등록이 조용히 False가 되고 위 무한 대기로
     이어진다. **직접 RegisterModule을 부르지 말고 이 함수를 경유할 것.**
     """
-    import win32com.client as win32
-    h = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")
+    h = _ensure_dispatch()
+    if auto_answer:
+        # ⭐ 대화상자를 «자동 응답»하게 해 둔다. 이 값의 효능은 아래 MESSAGEBOX_AUTO_ANSWER
+        #   에 2026-08-19부터 적혀 있었는데 **암호 해제 경로에서만 쓰였다.** 그래서 일반
+        #   렌더는 여전히 보이지 않는 모달에 걸려 무한 대기할 수 있었다(2026-09-11 실제로
+        #   걸렸다 — 새 문서를 만들어 저장하려다 멈췄고, 한글 인스턴스 10개가 남았다).
+        #   해법을 파일 안에 적어 두고 정작 기본 경로에 안 건 것이 문제였다.
+        try:
+            h.SetMessageBoxMode(MESSAGEBOX_AUTO_ANSWER)
+        except Exception:
+            pass
     if not register:
         return h
     ok = h.RegisterModule("FilePathCheckDLL", MODULE_NAME)
@@ -100,7 +151,7 @@ def make_hwp(register=True, strict=True):
                 h.Quit()
             except Exception:
                 pass
-            h = win32.gencache.EnsureDispatch("HWPFrame.HwpObject")
+            h = _ensure_dispatch()
             ok = h.RegisterModule("FilePathCheckDLL", MODULE_NAME)
     if not ok:
         msg = ("[hwp_render] 보안모듈(%s) 등록 실패 → 이 상태로 Open()을 부르면 "
@@ -116,19 +167,143 @@ def make_hwp(register=True, strict=True):
     return h
 
 
-def render_pdf(hwpx_path, pdf_path, fmt=None):
+def hnc_windows(pid=None):
+    """한컴 관련 창 목록 [(보임, pid, 프로세스명, 클래스, 제목), ...].
+
+    ⭐ **보이지 않는 창도 잡힌다**(`IsWindowVisible`=0). 「모달이 떠서 멈췄는데 화면엔
+    아무것도 안 보인다」에서 **무엇이 막고 있는지 볼 수 있다는 뜻이다.** 2026-09-11
+    이전에는 이 능력이 있는데도 안 썼다 — 동기 COM 호출이 멈추면 «들여다볼 기회»
+    자체가 없었기 때문이다. 그래서 아래 워치독이 이 함수를 부른다.
+    """
+    import win32gui
+    import win32process
+    import psutil
+    out = []
+
+    def cb(h, _):
+        try:
+            wpid = win32process.GetWindowThreadProcessId(h)[1]
+            name = psutil.Process(wpid).name()
+        except Exception:
+            return
+        if pid is not None and wpid != pid:
+            return
+        low = name.lower()
+        if not (low.startswith("hwp") or low.startswith("hnc")):
+            return
+        out.append((bool(win32gui.IsWindowVisible(h)), wpid, name,
+                    win32gui.GetClassName(h), win32gui.GetWindowText(h)))
+
+    win32gui.EnumWindows(cb, None)
+    return out
+
+
+def dismiss_hnc_popups(kill_updater=False):
+    """한컴 «업데이트 알림»류 창을 닫는다. 닫은 창 수를 돌려준다.
+
+    업데이트 창은 COM 모달이 아니라 `HncUpdateTray.exe`가 띄우는 **별개 프로세스의
+    창**이다. 그래서 SetMessageBoxMode로는 안 없어지고 자동화 중에 포커스를 훔쳐 간다.
+    `kill_updater=True`면 트레이 프로세스째 종료한다 — 사용자 «설정»은 건드리지 않으므로
+    다음 로그인에 다시 뜬다(설정을 말없이 바꾸지 않는다).
+
+    ⚠ **대상은 `Hnc*` 프로세스의 창뿐이고 `Hwp.exe`(한글 본체)의 창은 절대 닫지 않는다.**
+      사용자가 보고 있는 문서나 진짜 대화상자를 닫아 버리면 안 된다.
+    ⚠ 실측(2026-09-11): 트레이의 주 창에 WM_CLOSE 를 보내면 **트레이 프로세스가 종료된다.**
+      의도한 동작이지만(업데이트 알림이 자동화 중 포커스를 훔친다) 조용히 일어나면 안 되므로
+      호출자가 몇 개를 닫았는지 돌려받아 «보고»할 수 있게 한다.
+    """
+    import subprocess
+    import win32con
+    import win32gui
+    handles = _hnc_visible_handles()
+    n = 0
+    for h in handles:
+        try:
+            win32gui.PostMessage(h, win32con.WM_CLOSE, 0, 0)
+            n += 1
+        except Exception:
+            pass
+    if kill_updater:
+        subprocess.run(["taskkill", "/F", "/IM", "HncUpdateTray.exe"],
+                       capture_output=True, timeout=30)
+    return n
+
+
+def _hnc_visible_handles():
+    import win32gui
+    import win32process
+    import psutil
+    hits = []
+
+    def cb(h, _):
+        if not win32gui.IsWindowVisible(h):
+            return
+        try:
+            name = psutil.Process(win32process.GetWindowThreadProcessId(h)[1]).name()
+        except Exception:
+            return
+        if name.lower().startswith("hnc"):
+            hits.append(h)
+
+    win32gui.EnumWindows(cb, None)
+    return hits
+
+
+def _watchdog(seconds, label):
+    """COM 호출이 `seconds` 안에 안 끝나면 **막고 있는 창을 찍고 닫아 본다.**
+
+    멈춤을 «보이게» 만드는 장치다. 2026-08-25 사고(셸 3개·파이썬 4개가 250 CPU-시간을
+    태움)의 원인이 「보이지 않는 모달 + 타임아웃 없는 동기 호출」이었다. COM 호출 자체를
+    밖에서 끊을 수는 없다 — 대신 멈춤이 «침묵하지» 않게 한다.
+    호출자는 with 로 감싸고, 블록이 끝나면 워치독은 스스로 꺼진다.
+    """
+    import threading
+
+    done = threading.Event()
+
+    def watch():
+        if done.wait(seconds):
+            return
+        print("\n[hwp_render] %s 가 %d초째 안 끝난다. 지금 떠 있는 한컴 창:" % (label, seconds))
+        wins = hnc_windows()
+        if not wins:
+            print("  (없음 — 모달이 아니라 다른 이유로 느린 것일 수 있다)")
+        for vis, wpid, name, cls, title in wins:
+            print("  보임=%d pid=%-6d %-18s %-24s %s" % (vis, wpid, name, cls, title[:40]))
+        if dismiss_hnc_popups():
+            print("  → 한컴 알림 창을 닫아 봤다.")
+        print("  안 풀리면: taskkill /F /IM Hwp.exe")
+
+    threading.Thread(target=watch, daemon=True).start()
+
+    class _Ctx:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            done.set()
+            return False
+
+    return _Ctx()
+
+
+def render_pdf(hwpx_path, pdf_path, fmt=None, timeout=90):
     """한글 문서 → PDF. 창 없이 렌더.
 
     `fmt`를 안 주면 확장자로 정한다. ⚠️ 형식을 틀리게 주면 한글이 **조용히 빈 문서를
     열고** 백지 1쪽짜리 PDF가 나온다(예외가 안 난다). 예전에는 "HWPX"가 박혀 있어서
     `.hwp`를 넘기면 그렇게 됐다 — 렌더 결과의 쪽수·글자 수를 항상 확인할 것.
+
+    `timeout`은 «중단» 시한이 아니라 «진단» 시한이다. 그 안에 안 끝나면 무엇이 막고
+    있는지 창 목록을 찍고 알림 창을 닫아 본다(`_watchdog`).
     """
     src = os.path.abspath(hwpx_path)
     if fmt is None:
         fmt = "HWP" if src.lower().endswith(".hwp") else "HWPX"
     h = make_hwp()
-    h.Open(src, fmt, "forceopen:true")
-    h.SaveAs(os.path.abspath(pdf_path), "PDF", "")
+    with _watchdog(timeout, "Open/SaveAs(%s)" % os.path.basename(src)):
+        h.Open(src, fmt, "forceopen:true")
+        h.SaveAs(os.path.abspath(pdf_path), "PDF", "")
     try:
         h.Quit()
     except Exception:
@@ -388,6 +563,16 @@ def save_paginated(src, out=None, also=(), tries=3):
 
 
 if __name__ == "__main__":
+    # Windows 콘솔은 cp949 라 한글·긴줄표(—)·기호 출력에서 UnicodeEncodeError 로 죽는다.
+    # 결과를 다 만들어 놓고 «찍는 순간» 죽으므로, 부르는 쪽에는 도구가 고장난 것처럼 보인다.
+    # ⚠ 모듈 최상단이 아니라 여기 두는 이유: 이 파일이 import 되기도 하면 최상단
+    #    reconfigure 가 «호출자»의 인코딩을 바꾼다. 스크립트로 실행할 때만 돌게 한다.
+    try:
+        import sys as _s
+        _s.stdout.reconfigure(encoding='utf-8', errors='replace')
+        _s.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        pass
     import sys
     h = make_hwp()
     print("RegisterModule OK, dll=", _find_dll())

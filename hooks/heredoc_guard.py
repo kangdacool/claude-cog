@@ -70,6 +70,35 @@ HEREDOC = re.compile(
 # ⚠️ `-m` `-c` `-X` `--version` 처럼 뒤에 글자가 붙는 것은 잡지 않는다(진짜 옵션이다).
 STDIN_CODE = re.compile(r"(?:^|[;\n]|&&|\|\|)\s*(python3?|py)\s+-(?=\s|$)")
 
+# ── `python -c "..."` 인자에 비ASCII(한글 등) — heredoc 과 같은 훼손, 다른 입구 ──────────
+#
+# WHY. 2026-09-30 한 코호트 결과 덱: `python -c` 로 빌더에 한 줄을 넣었는데 인자 속 한글이
+# 인코딩을 거치며 깨져(«���� ������») 파일에 그대로 기록됐고, 같은 줄의 게이트 정규식은
+# 아무것도 못 잡는 «죽은 검사»가 된 채 통과했다. 같은 세션에 python -c 의 한글 치환이
+# «substring not found» 로 두 번 더 실패했다. 셸 인자는 이 기계에서 한글을 보존하지 않는다.
+# ⚠ «-c 인자 안»만 본다 — 같은 명령의 다른 부분(`; grep "한글" f`)은 셸이 그대로 넘기므로 막지 않는다.
+#    \uXXXX 이스케이프로 쓴 한글은 ASCII 라 통과한다(그 방법은 이 날 제대로 동작했다).
+PY_C_ARG = re.compile(r"(?:^|[;\n]|&&|\|\|)\s*(?:python3?|py)\s+-c\s+(['\"])")
+
+
+def py_c_nonascii(cmd):
+    """python -c 의 코드 인자에 비ASCII 문자가 있으면 그 앞뒤를 돌려준다."""
+    for m in PY_C_ARG.finditer(cmd):
+        q, i = m.group(1), m.end()
+        j = i
+        while j < len(cmd):
+            if cmd[j] == "\\" and q == '"':
+                j += 2
+                continue
+            if cmd[j] == q:
+                break
+            j += 1
+        arg = cmd[i:j]
+        for k, ch in enumerate(arg):
+            if ord(ch) > 127:
+                return arg[max(0, k - 25):k + 25]
+    return None
+
 
 def backtick_in_double_quotes(cmd):
     """큰따옴표 안의 «이스케이프되지 않은» 백틱을 찾는다. 있으면 그 앞뒤 30자를 돌려준다.
@@ -99,11 +128,8 @@ def backtick_in_double_quotes(cmd):
     return None
 
 
-def main():
-    try:
-        payload = json.load(sys.stdin)
-    except Exception:
-        return 0                                   # fail open
+def _run(payload):
+    """검사 본체. dispatch.py 와 main() 이 공유한다 — stdin 읽기는 밖에서 한다."""
     try:
         if payload.get("tool_name") != "Bash":
             return 0
@@ -123,6 +149,20 @@ def main():
                 "  - 커밋 메시지: -F 로 메시지 파일을 넘긴다.\n"
                 "  - 정말 셸에 넘겨야 하면: 작은따옴표로 감싸거나 \\` 로 이스케이프한다.\n"
                 % snippet.replace("\n", " "))
+            return 2
+
+        snip = py_c_nonascii(cmd)
+        if snip:
+            sys.stderr.write(
+                "BLOCKED: python -c 인자에 비ASCII 문자(한글 등)가 있습니다.\n\n"
+                "  ...%s...\n\n"
+                "셸 인자를 거치며 한글이 깨져 파일에 그대로 기록됩니다(2026-09-30 실측:\n"
+                "빌더의 게이트 한 줄이 깨진 채 저장돼 «아무것도 못 잡는 검사»가 됐다).\n\n"
+                "이렇게 하십시오:\n"
+                "  1. 스크립트를 Write 도구로 파일에 쓴다(한글이 UTF-8 로 그대로 간다).\n"
+                "  2. python scratchpad/fix.py 로 실행한다.\n"
+                "  (꼭 한 줄이어야 하면 한글을 \\uXXXX 이스케이프로 쓴다.)\n"
+                % snip.replace("\n", " "))
             return 2
 
         m = STDIN_CODE.search(cmd)
@@ -158,6 +198,27 @@ def main():
         return 2                                   # non-zero blocks and shows stderr
     except Exception:
         return 0                                   # fail open
+
+
+def check(payload):
+    """(종료코드, 메시지). dispatch.py 전용 — stderr 를 «가로채» 돌려준다."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(buf):
+            code = _run(payload)
+    except Exception:
+        return 0, ""                               # fail open
+    return code, buf.getvalue()
+
+
+def main():
+    try:
+        payload = (json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace")) if hasattr(sys.stdin, "buffer") else json.load(sys.stdin))  # Windows stdin 기본 cp949 — 한글 payload 가 깨졌다(2026-09-28)
+    except Exception:
+        return 0                                   # fail open
+    return _run(payload)
 
 
 if __name__ == "__main__":

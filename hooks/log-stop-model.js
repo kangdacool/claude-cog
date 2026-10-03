@@ -1,9 +1,19 @@
 #!/usr/bin/env node
 // Stop hook: read the transcript for this turn, find the model that was actually used,
-// and patch the last "(pending — filled by Stop hook)" placeholder in ./prompt_log.md.
+// and patch the last "(pending — filled by Stop hook)" placeholder in the project's prompt_log.md.
+//
+// ⚠ 자리 계산은 log-path.js 로 «통일»한다. log-prompt-submit 과 답이 다르면 이 훅이 항목을
+//   못 찾아 (pending) 이 영원히 남는다 — 조용히 실패하는 종류다.
 'use strict';
 const fs = require('fs');
 const path = require('path');
+
+let resolveLogPath;
+try {
+  ({ resolveLogPath } = require('./log-path'));
+} catch (e) {                              // fail-open
+  resolveLogPath = (d) => path.join(d, 'prompt_log.md');
+}
 
 function readStdin() {
   try {
@@ -49,7 +59,7 @@ if (transcriptPath && fs.existsSync(transcriptPath)) {
   }
 }
 
-const logPath = path.join(cwd, 'prompt_log.md');
+const logPath = resolveLogPath(cwd);
 if (!fs.existsSync(logPath)) process.exit(0);
 
 const placeholder = '(pending — filled by Stop hook)';

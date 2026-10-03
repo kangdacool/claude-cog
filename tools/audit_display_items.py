@@ -41,11 +41,30 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audit_text_consistency import read_any            # noqa: E402
 
 # "Table 1" / "Table S4" / "Figure S2" / "Figures 1 and 2" 는 첫 토큰만 잡는다.
-REF = re.compile(r"\b(Table|Figure|Fig\.)\s+(S?)(\d{1,2})\b")
+# ⚠ 본문 인용은 «대소문자를 가리지 않는다» — BMJ 계열(OEM·Lancet 등)은 달리는 글에서
+#   소문자가 정본 표기다("...adjusted odds (table 3, figure 2)"). 2026-09-04 실측:
+#   대문자만 잡던 이 정규식이 그런 원고에서 표·그림 «다섯 개 전부»를 고아로 신고했다.
+#   제목 줄은 아래 TITLE 이 «대문자로» 따로 잡아 인용에서 빼므로 자기인용 위험은 없다.
+#   ⚠ 패널 글자가 붙은 인용("Figure 5C")은 숫자 뒤에 \\b 가 서지 않아 «통째로 안 잡혔다»
+#   -- 2026-09-11 실측: 5A/5B/5C 로만 인용된 그림이 고아로 신고됐다. 뒤가 숫자만 아니면 된다.
+# ⚠ 마침표 «없는» Fig 도 잡는다 — PLOS 계열의 정본 표기가 `Fig 1` 이다(`Fig.` 아님).
+#   2026-09-20 실측: `Figs?\.` 가 마침표를 요구해서 PLOS NTD 투고 원고의 Fig 1~4 가
+#   «인용도 캡션도» 둘 다 안 잡혔고, 그래서 유령도 고아도 없이 조용히 통과했다.
+#   검사가 «아무것도 못 본 것»과 «이상이 없는 것»이 구별되지 않은 경우다.
+REF = re.compile(r"\b(Tables?|Figures?|Figs?\.?)\s+(S?)(\d{1,2})(?!\d)", re.I)
+# 「tables S1 and S2」·「figures 1 and 2」의 «뒤따르는» 번호. 2026-09-04 실측: 위 주석이
+# 「첫 토큰만 잡는다」고 적어 두었는데 정규식은 복수형조차 안 맞아, "online supplementary
+# tables S1 and S2" 로 인용된 S1~S4 가 전부 «미인용»으로 떴다.
+MORE = re.compile(r"\s*(?:,|and|&|to|–|-)\s*(S?)(\d{1,2})\b", re.I)
 # 표시물 «자체»의 제목 줄: 문단이 그 이름으로 시작하고 마침표나 줄바꿈이 따라온다.
-TITLE = re.compile(r"^\s*(Table|Figure)\s+(S?)(\d{1,2})\s*[.:]")
+# ⚠ 마크다운 원고는 캡션을 강조로 싼다(`**Table 1. ...**`) — 2026-09-20 실측: 그 `**` 때문에
+#   «표 다섯 개 전부»가 유령으로 신고됐다(한 초고). docx 에서는 강조가 서식이라
+#   본문 문자열에 안 보이지만 .md 에서는 글자다. 앞머리의 강조·인용·머리표를 벗기고 맞춘다.
+LEAD = re.compile(r"^[\s>#*_`]+")
+TITLE = re.compile(r"^\s*(Table|Figure|Figs?\.?)\s+(S?)(\d{1,2})\s*[.:]")
 
-KIND = {"Fig.": "Figure", "Figure": "Figure", "Table": "Table"}
+KIND = {"Fig.": "Figure", "Fig": "Figure", "Figs": "Figure", "Figure": "Figure",
+        "Table": "Table"}
 
 
 def key(kind, s, num):
@@ -60,13 +79,24 @@ def scan(body):
     """
     titles, cites = {}, []
     for i, para in enumerate(body):
-        t = TITLE.match(para)
+        t = TITLE.match(LEAD.sub("", para))
         if t:
             k = key(t.group(1), t.group(2), t.group(3))
             titles.setdefault(k, i)
             continue                      # 제목 줄에서는 인용을 세지 않는다
         for m in REF.finditer(para):
-            cites.append((key(m.group(1), m.group(2), m.group(3)), i))
+            # 소문자·복수형도 같은 열쇠로 모은다("tables 3" 과 "Table 3" 은 같은 표다).
+            k1 = m.group(1).lower().rstrip("s").rstrip(".")
+            kind = "Fig." if k1 == "fig" else ("Figure" if k1 == "figure" else "Table")
+            cites.append((key(kind, m.group(2).upper(), m.group(3)), i))
+            # 이어지는 번호들: "tables S1 and S2", "figures 1 and 2"
+            pos, ser = m.end(), m.group(2).upper()
+            while True:
+                mm = MORE.match(para, pos)
+                if not mm:
+                    break
+                cites.append((key(kind, (mm.group(1) or ser).upper(), mm.group(2)), i))
+                pos = mm.end()
     return titles, cites
 
 

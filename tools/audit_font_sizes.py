@@ -12,6 +12,16 @@ CORE §2①: "글씨를 항상 너무 작게 만든다. 사고 5회, '너무 크
   [SCALE] 이미지를 native보다 작게 배치 → **그림 안에 구워진 글씨가 그 비율만큼 줄어든다.**
           11pt로 그린 축 라벨을 0.7배로 넣으면 7.7pt가 된다. XML 검사로도 숫자 대조로도
           안 잡히고, 렌더에서만 보인다.
+          ⚠ **native 는 PNG 의 DPI 메타데이터에서 나온다 — 그 값이 «거짓»일 수 있다.**
+          2026-09-08 실측: 논문 PDF 에서 꺼낸 출판사 그림이 실제로는 300 dpi(인쇄폭 7.00in)
+          인데 메타데이터에 96 이 박혀 있었다. 그러면 native 가 21.9in 으로 읽혀 **어떤
+          슬라이드에 놓아도** 축소 배치로 신고된다 — 그림을 줄인 적이 없는데도.
+          → SCALE 이 «그 파일의 그림 전부»에 뜨면 먼저 `PIL.Image.open(p).info['dpi']` 를
+          확인한다. PDF 에서 꺼낸 그림이면 `page.get_image_rects(xref)` 로 실제 인쇄 폭을
+          재서 `im.save(out, dpi=(d, d))` 로 바로잡은 뒤 다시 볼 것.
+          «한두 장만» 뜨면 그건 진짜 축소 배치다 — 글씨를 줄이지 말고 그림을 키운다.
+          단 «설명용 그림»(장비 사진·부위 지도)은 대체 텍스트를 「설명용 …」으로 시작하게
+          두면 바닥이 0.60 으로 낮아진다(pptx 만 — ILLUSTRATION_FLOOR 주석).
   [SRC]   R/Python 플롯 소스의 크기 리터럴(cex=, size=, fontsize=)이 바닥값 미만
 
 Usage:
@@ -49,6 +59,20 @@ PROFILES = {
     "poster": dict(body=24, title=42, caption=24),
 }
 SCALE_FLOOR = 0.95      # native 대비 이 아래로 줄여 배치하면 구워진 글씨가 줄어든다
+## «설명용 그림»(장비 사진·측정 부위 지도처럼 청중이 글씨를 «읽지» 않는 그림)은 바닥을 낮춘다.
+## 2026-10-01 한 코호트 자료 소개 덱 13장: 연구자가 직접 키워 놓은 fNIRS 장비·ROI 그림이 0.94×·0.87× 로
+## FAIL 이 났다 — 데이터 그림의 규칙을 삽화에 그대로 쓴 것이다. 그렇다고 검사에서 빼면 같은 표시로
+## 데이터 그림이 숨는다. 그래서 «면제»가 아니라 «바닥을 낮춤»이고, 표시는 그림의 대체 텍스트(alt text,
+## p:cNvPr/@descr)가 「설명용」 또는 「illustration」으로 «시작»할 때만 인정한다 — 빌더가 일부러 써야 붙는다.
+ILLUSTRATION_FLOOR = 0.60
+_ILLUS_RE = re.compile(r"^\s*\[?\s*(설명용|illustration)", re.I)
+
+
+def _is_illustration(sh):
+    try:
+        return bool(_ILLUS_RE.match(sh._element.nvPicPr.cNvPr.get("descr") or ""))
+    except Exception:
+        return False
 SRC_FLOOR = 9           # 플롯 소스의 크기 리터럴 바닥값
 
 
@@ -63,18 +87,29 @@ def audit_pptx(path, floors):
                 try:
                     nat_w = sh.image.size[0] / (sh.image.dpi[0] or 300)
                     placed = Emu(sh.width).inches
-                    if nat_w and placed / nat_w < SCALE_FLOOR:
+                    illus = _is_illustration(sh)
+                    floor = ILLUSTRATION_FLOOR if illus else SCALE_FLOOR
+                    if nat_w and placed / nat_w < floor:
                         out.append((f"slide {i}", "SCALE", f"{sh.name!r} placed at "
-                                    f"{placed / nat_w:.2f}× native — 구워진 글씨가 그만큼 줄어든다"))
+                                    f"{placed / nat_w:.2f}× native"
+                                    + (" (설명용 그림 바닥 0.60 도 밑돈다)" if illus
+                                       else " — 구워진 글씨가 그만큼 줄어든다")))
                 except Exception:
                     pass
-            if not sh.has_text_frame:
-                continue
-            for p in sh.text_frame.paragraphs:
+            # ⚠ 2026-09-30: run 크기만 보던 판은 크기를 «문단 기본값(pPr/defRPr)»에 두는 빌더(kit_mono)의
+            #   글자를 거의 다 건너뛰었고, 표 셀은 아예 안 봤다 — 12pt 참고문헌이 13pt 바닥값을 «통과»했다.
+            #   run 크기가 없으면 문단 기본값을 쓰고, 표 셀도 같은 규칙으로 본다.
+            frames = []
+            if sh.has_text_frame:
+                frames.append(sh.text_frame)
+            if getattr(sh, "has_table", False):
+                frames += [c.text_frame for row in sh.table.rows for c in row.cells]
+            for p in (p for tf in frames for p in tf.paragraphs):
                 for r in p.runs:
-                    if r.font.size is None:
+                    size = r.font.size or p.font.size
+                    if size is None or not r.text.strip():
                         continue
-                    pt = r.font.size.pt
+                    pt = size.pt
                     # 두 층으로 나눈다. 캡션 바닥값 미만 = 위반. 그 사이 = 캡션이라면 의도일
                     # 수 있으므로 경고만 — 한 층으로 재면 의도한 캡션까지 전부 신고해
                     # 목록이 신뢰를 잃는다.

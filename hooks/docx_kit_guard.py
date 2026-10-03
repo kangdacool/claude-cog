@@ -74,11 +74,8 @@ brief_table(격자·색 헤더). 자세한 것은 SKILL.md.
 """
 
 
-def main():
-    try:
-        payload = json.load(sys.stdin)
-    except Exception:
-        return 0
+def _run(payload):
+    """검사 본체. dispatch.py 와 main() 이 공유한다 — stdin 읽기는 밖에서 한다."""
     try:
         if payload.get("tool_name") not in ("Write", "Edit"):
             return 0
@@ -109,6 +106,27 @@ def main():
         return 2                                   # stderr가 Claude에게 전달된다
     except Exception:
         return 0                                   # 실패는 조용히 통과
+
+
+def check(payload):
+    """(종료코드, 메시지). dispatch.py 전용 — stderr 를 «가로채» 돌려준다."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(buf):
+            code = _run(payload)
+    except Exception:
+        return 0, ""
+    return code, buf.getvalue()
+
+
+def main():
+    try:
+        payload = (json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace")) if hasattr(sys.stdin, "buffer") else json.load(sys.stdin))  # Windows stdin 기본 cp949 — 한글 payload 가 깨졌다(2026-09-28)
+    except Exception:
+        return 0
+    return _run(payload)
 
 
 if __name__ == "__main__":

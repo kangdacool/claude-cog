@@ -395,6 +395,12 @@ project/
 
 세부 규칙(편집 지시 반영·전문가 청중·AI 흔적·그림 범례) → `docs/claude-operating-guide.md` §6
 
+⛔ **모든 연구 파이프라인의 .docx·.pptx·.xlsx 산출물은 넘기기 전 그 Office 프로그램으로 재저장한다**(2026-10-02 연구자:
+「앞으로도 word 재저장을 꼭 해라. 모든 연구 파이프라인 산출물 규칙으로」「powerpoint와 엑셀도 그렇게 해야지」).
+빌더의 저장 뒤에 `agent/tools/office_finalize.py` 의 `finalize(path)` — python-docx·python-pptx·openpyxl 의 지문
+(app.xml 「Macintosh Word/PowerPoint」·「Openpyxl」, 「Steve Canny」, 「generated using python-pptx」)을 지운다.
+`audit_doc_properties.py` 가 결함으로 잡는다. 한글(.hwp)은 한글 COM 으로 저장하는 단계가 이미 같은 일을 한다.
+
 ---
 
 ## PPT Generation (python-pptx)

@@ -23,6 +23,9 @@ BLOCK = [
     'cd /d && python - "MEMORY.md" 2>/dev/null; echo x',
     "cd /d && sed -i 's|a|b|' f; python - \"noop\" 2>/dev/null; echo x",
     "python3 -",
+    # python -c 인자 속 한글 — 셸 인자를 거치며 깨진다(2026-09-30 실측)
+    "python -c \"s=s.replace('a','내부 변수명')\"",
+    "cd /d/x && python -c 'print(\"한글\")'",
 ]
 ALLOW = [
     "ls -la",
@@ -48,6 +51,9 @@ ALLOW = [
     'grep -rn "python -" hooks/',
     # 파이프로 stdin이 «진짜» 있는 경우: 정상 작동하므로 막지 않는다.
     "cat s.py | python -",
+    # python -c 는 ASCII 면 통과. 같은 명령의 «다른 부분»에 있는 한글은 셸이 그대로 넘긴다.
+    "python -c \"print('\\uccab')\"",
+    'python -c "print(1)"; grep -n "한글" f.txt',
 ]
 
 

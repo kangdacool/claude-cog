@@ -198,4 +198,14 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    # Windows 콘솔은 cp949 라 한글·긴줄표(—)·기호 출력에서 UnicodeEncodeError 로 죽는다.
+    # 결과를 다 만들어 놓고 «찍는 순간» 죽으므로, 부르는 쪽에는 도구가 고장난 것처럼 보인다.
+    # ⚠ 모듈 최상단이 아니라 여기 두는 이유: 이 파일이 import 되기도 하면 최상단
+    #    reconfigure 가 «호출자»의 인코딩을 바꾼다. 스크립트로 실행할 때만 돌게 한다.
+    try:
+        import sys as _s
+        _s.stdout.reconfigure(encoding='utf-8', errors='replace')
+        _s.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        pass
     sys.exit(main())

@@ -72,6 +72,52 @@ def main():
     FG.make_flowchart(steps, os.path.join(tempfile.mkdtemp(), "g.png"))
     check(steps[0]["box"] == long2, "원본 steps 가 그대로다")
 
+    print("(g) 두 갈래 흐름도 — 그려지고, 상자끼리 겹치지 않고, 글이 상자 안에 든다")
+    trunk = [{"box": "Year 2 participants\n(n = 645)", "exclude": None},
+             {"box": "Seen at Year 2 and Year 3\n(n = 353)",
+              "exclude": "Excluded (n = 292)\n• Not seen at Year 3"}]
+    arms = [{"box": "MCI at Year 2\n(n = 192)",
+             "exclude": "Excluded (n = 21)\n• No facial task (n = 12)\n• Missing covariate (n = 9)",
+             "final": "MCI analytic sample\n(n = 171)",
+             "outcomes": ["Stable MCI\n(n = 112)", "Reverted\n(n = 52)", "Dementia\n(n = 7)"]},
+            {"box": "Normal cognition at Year 2\n(n = 149)",
+             "exclude": "Excluded (n = 13)\n• No facial task (n = 9)\n• Missing covariate (n = 4)",
+             "final": "Normal analytic sample\n(n = 136)",
+             "outcomes": ["Normal\n(n = 99)", "MCI or dementia\n(n = 37)"]}]
+    tmp = os.path.join(tempfile.mkdtemp(), "split.png")
+    geo = FG.make_split_flowchart(trunk, arms, tmp)
+    check(os.path.exists(tmp), "두 갈래 PNG 가 만들어졌다")
+    bx = geo["boxes"]
+    over = [(a[0], b[0]) for i, a in enumerate(bx) for b in bx[i + 1:]
+            if a[1] < b[3] and b[1] < a[3] and a[2] < b[4] and b[2] < a[4]]
+    check(not over, "상자 겹침 없음 (%d)" % len(over))
+    inside = all(0 <= b[1] and b[3] <= geo["W"] + 1e-6 and 0 <= b[2] and b[4] <= geo["H"] + 1e-6
+                 for b in bx)
+    check(inside, "모든 상자가 그림 안에 있다")
+    fitok = all(max(FG._line_pts(ln, "Arial", 10) for ln in b[5].split("\n")) / 72.0
+                <= (b[3] - b[1]) + 1e-6 for b in bx)
+    check(fitok, "모든 글이 상자 폭 안에 든다")
+    check(sum(1 for b in bx if b[0] == "outcome") == 5, "결과 상자 5 개(3 + 2)")
+
+    print("(h) 갈래가 둘이 아니면 거부한다 (실패해야 하는 입력)")
+    try:
+        FG.make_split_flowchart(trunk, arms[:1], os.path.join(tempfile.mkdtemp(), "x.png"))
+        check(False, "갈래 1 개를 받아들였다")
+    except ValueError:
+        check(True, "갈래 1 개 -> ValueError")
+
+    print("(i) 제외를 줄기에서 한 번에 하면 갈래 상자 없이 그린다 (2026-10-02)")
+    arms0 = [dict(a, box=None, exclude=None) for a in arms]
+    g0 = FG.make_split_flowchart(trunk, arms0, os.path.join(tempfile.mkdtemp(), "x0.png"))
+    check(not any(b[0] == "arm" for b in g0["boxes"]), "갈래 상자를 그리지 않는다")
+    check(sum(1 for b in g0["boxes"] if b[0] == "final") == 2, "최종 상자 둘")
+    try:
+        FG.make_split_flowchart(trunk, [dict(arms0[0], exclude="x"), arms0[1]],
+                                os.path.join(tempfile.mkdtemp(), "x1.png"))
+        check(False, "갈래 상자 없이 갈래 제외를 받아들였다")
+    except ValueError:
+        check(True, "갈래 상자 없이 갈래 제외 -> ValueError")
+
     print()
     if FAILS:
         print("FAILED %d" % len(FAILS))
@@ -81,4 +127,14 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows 콘솔은 cp949 라 한글·긴줄표(—)·기호 출력에서 UnicodeEncodeError 로 죽는다.
+    # 결과를 다 만들어 놓고 «찍는 순간» 죽으므로, 부르는 쪽에는 도구가 고장난 것처럼 보인다.
+    # ⚠ 모듈 최상단이 아니라 여기 두는 이유: 이 파일이 import 되기도 하면 최상단
+    #    reconfigure 가 «호출자»의 인코딩을 바꾼다. 스크립트로 실행할 때만 돌게 한다.
+    try:
+        import sys as _s
+        _s.stdout.reconfigure(encoding='utf-8', errors='replace')
+        _s.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except AttributeError:
+        pass
     sys.exit(main())

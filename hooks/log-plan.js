@@ -1,10 +1,19 @@
 #!/usr/bin/env node
 // PostToolUse (matcher: ExitPlanMode) hook: once a plan is approved, append the full plan
-// file content to ./prompt_log.md so plans are traceable alongside prompts.
+// file content to the project's prompt_log.md so plans are traceable alongside prompts.
+//
+// ⚠ 자리 계산은 log-path.js 로 통일 — 세 로깅 훅이 같은 파일을 봐야 한다.
 'use strict';
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+let resolveLogPath;
+try {
+  ({ resolveLogPath } = require('./log-path'));
+} catch (e) {                              // fail-open
+  resolveLogPath = (d) => path.join(d, 'prompt_log.md');
+}
 
 function readStdin() {
   try {
@@ -60,7 +69,7 @@ try {
   process.exit(0);
 }
 
-const logPath = path.join(cwd, 'prompt_log.md');
+const logPath = resolveLogPath(cwd);
 const block = `### PLAN — ${timestamp()}\n(source: ${planPath})\n\n${planContent}\n\n`;
 fs.appendFileSync(logPath, block, 'utf8');
 process.exit(0);

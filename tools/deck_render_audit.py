@@ -65,7 +65,10 @@ def render(pptx, png_dir):
     pptx = Path(pptx).resolve()
     dst = Path(png_dir).resolve() / pptx.stem
     dst.mkdir(parents=True, exist_ok=True)
+    # ⛔ Dispatch 는 사람이 열어 둔 PowerPoint 에 붙는다 — 무조건 Quit 하면 그 사람의 창까지 꺼진다
+    #    (2026-09-30 연구자: 「ppt 열면 자꾸 알아서 꺼버리냐」). 내가 띄운 경우에만 끈다.
     app = win32com.client.Dispatch("PowerPoint.Application")
+    had_open = app.Presentations.Count > 0
     pres = app.Presentations.Open(str(pptx), WithWindow=False)
     try:
         for i, slide in enumerate(pres.Slides, start=1):
@@ -74,7 +77,8 @@ def render(pptx, png_dir):
                              / pres.PageSetup.SlideWidth))
     finally:
         pres.Close()
-        app.Quit()
+        if not had_open and app.Presentations.Count == 0:
+            app.Quit()
     return dst
 
 

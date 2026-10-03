@@ -91,6 +91,77 @@ def candidates(command):
     return found
 
 
+# ⛔ «청중에게 가지 않는» 자리. 확장자가 맞아도 산출물이 아니다.
+#
+# 2026-09-11 실측 오발: 스크래치패드에 떠 둔 되돌림용 사본(`before_strip.hwpx`)을 감사하고
+# 검증 명령을 «막았다». 거기서 찾은 결함은 내가 이미 제거한 학회 공고문의 따옴표였다 —
+# 산출물에는 없는 결함으로 작업을 세운 것이다. 무거운 감사(렌더 포함)가 백업본에 돌았다.
+#
+# 이게 왜 치명적인가: 이 훅의 설계 근거가 「우는 훅은 하루 만에 꺼진다」인데(위 EXTS 주석),
+# 오발은 정확히 그 「울음」이다. 표적을 좁히는 것이 속도를 올리는 것보다 값이 크다.
+#
+# ⚠⚠ **첫 판(2026-09-11 오전)은 이름 목록이었고, 그래서 부족했다.**
+#   `scratchpad|_work|_archive|temp|before_|.bak|-백업`… 을 열거했는데, 이건 hwp_com_guard 가
+#   COM 이름 6개를 열거해 **7가지 변형 중 1개만 잡은 것과 같은 모양**이다. `old/` `previous/`
+#   `v1/` `draft_원본.hwpx` 는 전부 통과한다 — 그날 나를 문 이름만 막은 것이다.
+#
+#   그래서 **임시 자리는 이름이 아니라 «구조»로 판정한다** — OS 가 말하는 임시 루트
+#   (`tempfile.gettempdir()`, `%TEMP%`, `%TMP%`)와 실제 경로를 대조한다. 폴더를 뭐라 부르든
+#   그 아래면 임시다. 이건 목록이 아니라 사실이라 새 이름에 뚫리지 않는다.
+#
+#   ⛔ 그래도 «백업 사본»은 여전히 이름으로 볼 수밖에 없다(내용이 같은지 보는 것은 과하다).
+#      즉 아래 SKIP_NAMES 는 원리상 불완전하다 — 새 작명이 나오면 또 뚫린다. 그때는
+#      이름을 더하지 말고 «그 파일이 어디서 왔는가»를 물을 것.
+def _temp_roots():
+    """OS·환경이 말하는 임시 루트들. 이름이 아니라 실제 경로."""
+    import tempfile
+    roots = [tempfile.gettempdir(), os.environ.get("TEMP"), os.environ.get("TMP")]
+    out = []
+    for r in roots:
+        if not r:
+            continue
+        try:
+            out.append(os.path.realpath(r).replace("\\", "/").rstrip("/").lower())
+        except OSError:
+            pass
+    return out
+
+
+TEMP_ROOTS = _temp_roots()
+
+
+def _under_temp(path):
+    try:
+        p = os.path.realpath(path).replace("\\", "/").lower()
+    except OSError:
+        return False
+    return any(p == r or p.startswith(r + "/") for r in TEMP_ROOTS)
+
+
+# 작업 «보관» 자리 — 이 이름들은 이 연구실의 실제 규약이다(CLAUDE.md 저작물 폴더 절).
+# 임시 자리는 위 _under_temp 가 구조로 보므로 여기엔 «규약 폴더»만 남긴다.
+SKIP_DIRS = re.compile(
+    r"(?:^|[\\/])(?:"
+    r"scratchpad|_work|_archive|snapshots|\.git|__pycache__|node_modules"
+    r")(?:[\\/]|$)", re.I)
+SKIP_NAMES = re.compile(
+    r"(?:^|[\\/])(?:before_|orig_|backup_|bak_|~\$)"          # 되돌림·백업 사본
+    r"|\.(?:bak|orig|tmp)(?:\.|$)"                            # x.bak.hwpx
+    r"|[-_](?:bak|backup|copy|사본|백업|원본)[-_.]", re.I)
+
+
+def is_deliverable_path(path):
+    """확장자가 맞아도 «청중에게 가는 자리»가 아니면 산출물이 아니다.
+
+    세 축: ① OS 가 말하는 임시 루트 아래인가(구조) ② 규약상 보관 폴더인가
+    ③ 백업 사본 작명인가. ①만 구조이고 ②③은 이름이라 원리상 불완전하다 —
+    새 작명이 나오면 또 뚫린다. 뚫렸을 때 이름을 더하기 «전에» 왜 그 파일이
+    거기 있는지부터 물을 것.
+    """
+    p = path.replace("\\", "/")
+    return not (_under_temp(path) or SKIP_DIRS.search(p) or SKIP_NAMES.search(p))
+
+
 def fresh_targets(raws, cwd):
     now, targets = time.time(), []
     for raw in raws:
@@ -98,6 +169,8 @@ def fresh_targets(raws, cwd):
         try:
             if not os.path.isfile(path):
                 continue
+            if not is_deliverable_path(path):
+                continue                            # 임시·백업 자리 — 청중에게 안 간다
             if now - os.path.getmtime(path) > FRESH_SECONDS:
                 continue                            # 이번 명령이 만든 게 아니다
         except OSError:
@@ -108,12 +181,8 @@ def fresh_targets(raws, cwd):
     return targets
 
 
-def main():
-    try:
-        event = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
-        return 0                                    # 훅 입력이 이상하면 조용히 통과
-
+def _run(event):
+    """검사 본체. dispatch.py 와 main() 이 공유한다 — stdin 읽기는 밖에서 한다."""
     tool = event.get("tool_name")
     ti = event.get("tool_input") or {}
     cwd = event.get("cwd") or os.getcwd()
@@ -166,6 +235,27 @@ def main():
     # 경로를 «해결된 것»으로 찍는다 -- 레이아웃이 둘이라 문자열로 박으면 한쪽에서 틀린다.
     print("\n  전체 출력(느린 검사 포함): python %s <파일>" % AUDIT, file=sys.stderr)
     return 2                                        # stderr가 Claude에게 전달된다
+
+
+def check(payload):
+    """(종료코드, 메시지). dispatch.py 전용 — stderr 를 «가로채» 돌려준다."""
+    import contextlib
+    import io
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(buf):
+            code = _run(payload)
+    except Exception:
+        return 0, ""
+    return code, buf.getvalue()
+
+
+def main():
+    try:
+        event = (json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace")) if hasattr(sys.stdin, "buffer") else json.load(sys.stdin))  # Windows stdin 기본 cp949 — 한글 payload 가 깨졌다(2026-09-28)
+    except (json.JSONDecodeError, ValueError):
+        return 0                                    # 훅 입력이 이상하면 조용히 통과
+    return _run(event)
 
 
 if __name__ == "__main__":

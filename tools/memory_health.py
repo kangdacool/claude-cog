@@ -100,6 +100,30 @@ CORE_BUDGET = 250
 #   (재현: 이력에서 `git show <rev>:agent/feedback/*`로 각 시점을 재는 스크립트. 필요하면 다시 짠다.)
 FILE_BUDGET = 450          # feedback 파일 하나. 넘으면 그 파일을 쪼개거나 도구/스킬로 이관
 BUNDLE_BUDGET = 1800       # CORE + MEMORY + 작업유형 묶음. 세션이 실제로 읽는 양
+
+# ⚠️ 예외는 «전역 상한»을 올리지 않고 여기에 둔다. FILE_BUDGET 을 600 으로 올리면
+#    35개 파일의 가드가 «전부» 느슨해진다 — 위 CORE_BUDGET 이력이 경고하는 바로 그
+#    미룸이 된다. 특정 작업의 교훈 유입이 많다면 그 파일만 넓힌다.
+#
+# 2026-08-28 연구자 결정: 「manuscript_rules는 약간 더 예산을 늘려도 될 것 같다.
+#   너가 «가장 잘해야 하는 작업» 중 하나거든. 그리고 앞으로도 많은 피드백이 있을 것이고.」
+#   근거: 원고 피드백은 «한 번에 파일 단위»로 온다(psy 260826: 13항목·세부 40여 개).
+#   그 교훈이 들어갈 곳은 이 파일 하나인데 2026-08-27에 448/450 으로 차서 새 교훈을
+#   막고 있었다(실제로 「보고 방식」 교훈 하나가 갈 곳이 없어 미기록으로 남았다).
+FILE_BUDGET_OVERRIDE = {"manuscript_rules.md": 600}
+
+# ⚠️ 파일 상한만 올리면 «묶음»에서 막힌다. 2026-08-28 실측: 원고 묶음이 이미
+#    1,648/1,800 이고 같은 묶음의 data_integrity 도 449/450 이라 여유가 152줄뿐이었다.
+#    -- 그래서 둘을 «같이» 올린다. 라벨은 CLAUDE.md 매핑표 첫 칸과 정확히 같아야 한다.
+BUNDLE_BUDGET_OVERRIDE = {"원고 · 보고서 · 논문요약서": 2000}
+
+
+def file_budget(name):
+    return FILE_BUDGET_OVERRIDE.get(name, FILE_BUDGET)
+
+
+def bundle_budget(label):
+    return BUNDLE_BUDGET_OVERRIDE.get(label, BUNDLE_BUDGET)
 ENTRY_BUDGET = 400         # MEMORY.md 인덱스 «한 항목». 훅이지 요약이 아니다
 # 실행 결과(2026-08-20): 48,469 → 27,779자(-43%), 400자 초과 41개 → 0개, 평균 180자.
 #   세션 시작 총비용 ~80–115k → ~67–97k 토큰. feedback을 깎는 것과 다른 점은 **작업 종류와
@@ -175,12 +199,22 @@ def bundles(root):
         #   포스터 행의 "(슬라이드 덱과 다른 장르 — `ppt_rules.md` 아님)" 이 그 예다.
         #   2026-08-23: 이걸 세는 바람에 포스터 묶음이 317 줄 부풀어 헛 초과가 났다.
         NEG = ("아님", "아니", "제외", "말 것", "말고", "не")
+        # ⚠ 매핑표 산문에는 «다른 저장소»의 경로도 등장한다 — 2026-09-07 실측: 다른 저장소의 행이
+        #   「rubric 이 `prompts/rubric.md` 로 «코드 밖»에 있다」고 설명하는데, 그걸 «읽어야 할
+        #   묶음 파일»로 파싱해 「없는 파일을 가리킨다」는 FIX 가 매 세션 떴다. 부정문맥 필터로는
+        #   안 걸린다(부정이 아니라 «남의 경로»다). 이 예산이 세는 것은 agent/feedback·reference
+        #   의 .md 뿐이므로 그 밖의 디렉터리를 가진 경로는 아예 세지 않는다.
+        #   ⛔ 매핑표 쪽 표기를 고쳐서 우회하지 말 것 — 남의 경로가 산문에 나오는 일은 또 있다.
+        OURS = ("feedback/", "reference/")
         files = []
         for m in re.finditer(r"`([a-z_/]+\.md)`", cells[-1]):
             tail = cells[-1][m.end():m.end() + 14]
             if any(tail.lstrip(" )·,").startswith(w) for w in NEG):
                 continue
-            files.append(m.group(1))
+            f = m.group(1)
+            if "/" in f and not f.startswith(OURS):
+                continue
+            files.append(f)
         if not files:
             continue
         tot, miss = 0, []
@@ -236,7 +270,38 @@ def _toks(t):
     return {w for w in re.findall(r"[가-힣A-Za-z]{2,}", t.lower()) if w not in _STOP}
 
 
-def drain_report(fb):
+def _index_entries(md):
+    """MEMORY.md 를 «항목» 단위로 자른다. -> [(글자수, 이름, 가리키는 경로)]
+
+    ⚠⚠ **한 항목은 여러 줄이다.** 2026-09-07 까지 이 검사는 물리적 «한 줄»을 재서
+      642자짜리 항목(7줄 x 38~89자)을 그냥 통과시켰다 — 어느 «줄»도 400을 안 넘으니까.
+      이 파일 머리말이 「줄 수로는 안 보이는 축」이라 적어 두고 정작 줄로 재고 있었다.
+      실측: 그렇게 놓치고 있던 항목이 6개였다.
+    """
+    out, cur = [], None
+    for l in md.split("\n"):
+        if l.startswith("- "):
+            if cur:
+                out.append(cur)
+            cur = [l]
+        elif cur is not None:
+            if not l.strip() or l[0] not in " \t":   # 빈 줄·새 블록에서 끊는다
+                out.append(cur)
+                cur = None
+            else:
+                cur.append(l.strip())               # 접힌 이어짐
+    if cur:
+        out.append(cur)
+    res = []
+    for e in out:
+        body = " ".join(e)
+        tgt = re.search(r"\]\(([^)]+)\)", body)
+        nm = re.search(r"\[([^\]]{0,40})\]", body)
+        res.append((len(body), nm.group(1) if nm else "?", tgt.group(1) if tgt else ""))
+    return res
+
+
+def drain_report(fb, index=None):
     import itertools
     secs = _sections(fb)
     print("=" * 68)
@@ -262,7 +327,7 @@ def drain_report(fb):
 
     print("\n[2] 파일당 상한을 넘은 파일의 «가장 긴 절» — 여기부터 민다")
     over = {p.name for p in sorted(fb.glob("*.md"))
-            if len(p.read_text(encoding="utf-8").splitlines()) > FILE_BUDGET
+            if len(p.read_text(encoding="utf-8").splitlines()) > file_budget(p.name)
             and p.name != "CORE.md"}
     if over:
         print(f"  상한 초과 파일: {', '.join(sorted(over))}")
@@ -303,6 +368,23 @@ def drain_report(fb):
     except Exception as e:
         print(f"  (git 조회 실패: {e})")
 
+    # ⭐ 2026-09-07 신설. 그 전까지 이 보고서의 후보 넷이 «전부 feedback/» 대상이었고,
+    #   정작 매 세션 읽히는 «가장 큰 파일»(MEMORY.md)은 드레인 시야 밖에 있었다.
+    #   feedback 을 깎는 것과 다른 점: 인덱스는 **작업 종류와 무관하게** 매 세션 빠진다.
+    print(f"\n[5] MEMORY.md 인덱스에서 {ENTRY_BUDGET}자를 넘는 «항목» (줄이 아니라 항목 단위)")
+    if index is None or not Path(index).exists():
+        print("  (MEMORY.md 를 못 찾았다)")
+    else:
+        fat = [(n, nm, t) for n, nm, t in
+               _index_entries(Path(index).read_text(encoding="utf-8")) if n > ENTRY_BUDGET]
+        if not fat:
+            print("  없음 — 모든 항목이 훅 크기다")
+        else:
+            print(f"  {len(fat)}개 · 초과분 합계 {sum(n - ENTRY_BUDGET for n, _, _ in fat):,}자")
+            for n, nm, t in sorted(fat, reverse=True):
+                kind = "→ .md 로 옮긴다" if t.endswith(".md") else "⚠ 도구 항목 — 줄이면 순삭제"
+                print(f"  {n:5d}자  {nm[:44]:<44} {kind}")
+
     print("\n뺄 때: 흡수처에 내용이 «실제로» 있는지 먼저 확인한다. 없으면 순삭제다.")
     print("포인터로 축약할 땐 고유 내용(그 파일에만 있는 팁)은 남긴다.")
 
@@ -342,23 +424,22 @@ def main(root):
     # ---- 1b. 파일당 상한 — 한 파일이 비대해지면 그 주제를 다루는 모든 세션이 값을 치른다
     for p in fb_files:
         n = wc(p)
-        if n > FILE_BUDGET and p.name != "CORE.md":
-            problems.append(f"{p.name} {n} > {FILE_BUDGET} lines — 파일 하나가 너무 무겁다. "
-                            f"절을 도구/스킬로 이관하거나 쪼갤 것 (초과 {n - FILE_BUDGET}줄)")
+        fb_cap = file_budget(p.name)
+        if n > fb_cap and p.name != "CORE.md":
+            problems.append(f"{p.name} {n} > {fb_cap} lines — 파일 하나가 너무 무겁다. "
+                            f"절을 도구/스킬로 이관하거나 쪼갤 것 (초과 {n - fb_cap}줄)")
 
     # ---- 1b-1. 인덱스 «항목» 글자 상한 — 줄 수로는 안 보이는 축
     # 두 종류를 갈라 잡는다. 같은 잣대를 대면 도구 항목이 «통과 불가»가 되어
     # 늘 빨간 게이트가 된다(= 신호 0). 도구 항목은 그 줄이 «곧 문서»이기 때문이다.
     if index.exists():
+        # ⚠ 예전에는 여기서 «물리적 한 줄»을 쟀다. 항목은 접혀서 여러 줄이므로
+        #   642자짜리(7줄 x 38~89자)가 통과했다 — _index_entries 주석 참조.
         doc_fat, tool_fat = [], []
-        for l in index.read_text(encoding="utf-8").split("\n"):
-            if not l.startswith("- ") or len(l) <= ENTRY_BUDGET:
+        for n, name, tgt in _index_entries(index.read_text(encoding="utf-8")):
+            if n <= ENTRY_BUDGET:
                 continue
-            m = re.search(r"\]\(([^)]+)\)", l)
-            tgt = m.group(1) if m else ""
-            name = re.search(r"\[([^\]]{0,40})\]", l)
-            (doc_fat if tgt.endswith(".md") else tool_fat).append(
-                (len(l), name.group(1) if name else "?"))
+            (doc_fat if tgt.endswith(".md") else tool_fat).append((n, name))
         if doc_fat:
             problems.append(
                 f"MEMORY.md: {ENTRY_BUDGET}자 넘는 인덱스 항목 {len(doc_fat)}개 "
@@ -391,13 +472,22 @@ def main(root):
             if miss:
                 problems.append(f"CLAUDE.md 매핑표 「{label}」이 없는 파일을 가리킨다: "
                                 f"{', '.join(miss)}")
-            if tot + base > BUNDLE_BUDGET:
-                problems.append(f"묶음 「{label}」 {tot + base} > {BUNDLE_BUDGET} lines "
+            bcap = bundle_budget(label)
+            if tot + base > bcap:
+                problems.append(f"묶음 「{label}」 {tot + base} > {bcap} lines "
                                 f"(CORE+MEMORY {base} + {' + '.join(Path(f).stem for f in files)}) "
                                 "— 이 작업을 하는 모든 세션이 이만큼 읽는다")
         if worst:
-            print(f"최대 묶음                 {worst[2] + base:5d} lines   "
-                  f"(budget {BUNDLE_BUDGET})  「{worst[0]}」")
+            ## ⚠️ 「최대」는 예외를 받은 묶음이 아니라 «상한에 가장 가까운» 묶음이어야
+            ##    한다 -- 예외 묶음이 늘 1등으로 찍히면 나머지가 안 보인다.
+            tight = max(bs, key=lambda b: (b[2] + base) / bundle_budget(b[0]))
+            print(f"최대 묶음                 {tight[2] + base:5d} lines   "
+                  f"(budget {bundle_budget(tight[0])})  「{tight[0]}」")
+            for lb in BUNDLE_BUDGET_OVERRIDE:
+                hit = next((b for b in bs if b[0] == lb), None)
+                if hit:
+                    print(f"  예외 묶음                {hit[2] + base:5d} lines   "
+                          f"(budget {bundle_budget(lb)})  「{lb}」")
 
     # ---- 2. 규모 서술이 실제와 어긋나는가
     # 어떤 숫자가 무엇을 가리키는지 문맥으로 귀속시키려 했더니("feedback"·"CORE"가 한 문장에
@@ -436,6 +526,14 @@ def main(root):
             n = front_name(p)
             if n:
                 names.setdefault(n, p)
+    # ⭐ 스킬도 wikilink 대상이다. 장르 절차서를 Skill 로 옮기면(본문이 «쓸 때만» 로드된다)
+    #   [[ppt-rules]] 가 여기서만 「끊어졌다」고 나온다 — 링크는 멀쩡하고 검사기가 몰랐던 것이다.
+    skills = Path.home() / ".claude" / "skills"
+    if skills.exists():
+        for d in sorted(skills.iterdir()):
+            f = d / "SKILL.md"
+            if f.is_file():
+                names.setdefault(front_name(f) or d.name, f)
 
     for p in fb_files + ref_files + ([index] if index.exists() else []):
         for link in sorted(set(LINK.findall(prose(p)))):
@@ -468,6 +566,33 @@ def main(root):
             notes.append(f"{p.relative_to(root)}: pending/TODO인데 {age}개월간 수정 없음 "
                          f"(마지막 {mtime}) — 현재 파일 상태 확인 후 사용")
 
+    # ---- 7. projects/ 폴더 ↔ MEMORY.md 인덱스 덮개
+    #
+    # 5번이 feedback/·reference/ 의 고아만 세고 projects/ 는 안 봤다. 그 틈에서 사고가 났다 —
+    # 2026-09-12, 인덱스를 간결한 목록으로 개편하며 **6개 프로젝트가 조용히 빠졌다**
+    # (어느 여섯인지는 그날 git 이력에). 메모리 파일은 그대로 있는데 인덱스에서 사라져서, 그 프로젝트를
+    # 여는 세션이 자기 메모리를 못 찾는다. 줄 수 예산은 그때 전부 통과였다 —
+    # 「무겁지 않은가」는 봤고 「다 있는가」는 안 봤다.
+    pdir = root / "projects"
+    if pdir.exists() and index.exists():
+        itxt2 = index.read_text(encoding="utf-8")
+        plinked = set(re.findall(r"\(projects/([^/]+)/[^)]+\)", itxt2))
+        # 「- 이름 — 그 폴더의 CLAUDE.md」 = 정본을 프로젝트 폴더로 내린 것. 누락이 아니다
+        pbare = {m.strip() for m in re.findall(r"^- ([^\[\n]+?) — 그 폴더의", itxt2, re.M)}
+        orphan_dirs, empty_dirs = [], []
+        for d in sorted(p.name for p in pdir.iterdir() if p.is_dir()):
+            if d in plinked or d in pbare:
+                continue
+            (empty_dirs if not any((pdir / d).iterdir()) else orphan_dirs).append(d)
+        if orphan_dirs:
+            problems.append(
+                "projects/ 에 있는데 MEMORY.md 인덱스에 없는 프로젝트: "
+                + ", ".join(orphan_dirs)
+                + " — 그 프로젝트를 여는 세션이 자기 메모리를 못 찾는다"
+            )
+        if empty_dirs:
+            notes.append(f"빈 프로젝트 폴더(파일 0개): {', '.join(empty_dirs)} — 지울지 판단할 것")
+
     print()
     for n in notes:
         print(f"  NOTE  {n}")
@@ -486,5 +611,5 @@ if __name__ == "__main__":
     rc = main(a.root)
     if a.drain:
         print()
-        drain_report(Path(a.root) / "feedback")
+        drain_report(Path(a.root) / "feedback", Path(a.root) / "MEMORY.md")
     sys.exit(rc)

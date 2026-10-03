@@ -7,7 +7,9 @@
 
     python deliverable_guard_selftest.py
 """
+import atexit
 import os
+import shutil
 import sys
 import tempfile
 import time
@@ -23,7 +25,14 @@ import deliverable_guard as G
 fails = []
 
 
+ran = []
+
+
 def check(label, got, want):
+    # ⚠ 개수는 «세어서» 찍는다. 예전엔 요약줄에 「15 cases」가 문장으로 박혀 있었고,
+    #   사례를 9개 더한 순간 조용히 거짓이 됐다(2026-09-11). [[core]] §3 — 행수·개수를
+    #   문장에 박지 말 것. 박아야 하면 「문서가 말한 숫자 vs 실제」를 대조할 것.
+    ran.append(label)
     if got != want:
         fails.append("%s\n      기대 %r\n      실제 %r" % (label, want, got))
 
@@ -42,7 +51,12 @@ check("md는 원고 «소스»지 산출물이 아님", G.candidates("python bui
 check("확장자 없음", G.candidates("ls output/"), [])
 
 # ---- 2. 신선도(mtime) ----------------------------------------------------
-tmp = tempfile.mkdtemp(prefix="dg_selftest_")
+# ⚠ fixture 를 OS 임시 폴더에 만들면 «새 규칙이 그걸 정확히 걸러낸다»(2026-09-11).
+#   규칙이 맞으므로 규칙을 풀지 말고 시험 자리를 옮긴다 — 임시 루트 «밖»에 만든다.
+tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "._dg_fixture")
+shutil.rmtree(tmp, ignore_errors=True)
+os.makedirs(tmp, exist_ok=True)
+atexit.register(lambda: shutil.rmtree(tmp, ignore_errors=True))
 fresh = os.path.join(tmp, "fresh.docx")
 stale = os.path.join(tmp, "stale.docx")
 for p in (fresh, stale):
@@ -54,6 +68,33 @@ os.utime(stale, (old, old))
 check("방금 쓴 파일은 대상", G.fresh_targets([fresh], tmp), [fresh])
 check("오래된 파일은 대상 아님", G.fresh_targets([stale], tmp), [])
 check("없는 파일은 대상 아님", G.fresh_targets([os.path.join(tmp, "nope.docx")], tmp), [])
+
+# ---- 2b. «청중에게 가는 자리»인가 (2026-09-11 오발에서 나옴) -----------------
+# 실제 오발: 스크래치패드의 되돌림용 사본 `before_strip.hwpx` 를 감사하고 검증 명령을
+# «막았다». 거기서 찾은 결함은 내가 이미 제거한 학회 공고문의 따옴표 — 산출물에는 없는
+# 결함으로 작업을 세운 것이다. 확장자도 신선도도 둘 다 «참»이었으므로, 이 축이 없으면 못 막는다.
+for label, p, want in [
+    ("스크래치패드 사본",
+     r"C:\Users\U\AppData\Local\Temp\claude\s\scratchpad\before_strip.hwpx", False),  # noleak
+    ("_work 되돌림본", r"D:\proj\_work\before_strip.hwpx", False),  # noleak
+    ("_archive", r"D:\proj\_archive\old.docx", False),  # noleak
+    ("백업 확장자", r"D:\proj\manuscript\draft.bak.docx", False),  # noleak
+    ("사본 표기", r"D:\proj\manuscript\draft-백업.docx", False),  # noleak
+    ("워드 잠금파일", r"D:\proj\manuscript\~$draft.docx", False),  # noleak
+    ("진짜 산출물", r"D:\proj\manuscript\draft_260911.docx", True),  # noleak
+    ("진짜 투고본", r"D:\proj\submission\main.hwpx", True),  # noleak
+    ("이름에 temp 가 든 «정상» 폴더", r"D:\proj\template\deck.pptx", True),  # noleak
+    ("원본 표기", r"D:\proj\manuscript\draft_원본.docx", False),  # noleak
+]:
+    check("자리 판정 — " + label, G.is_deliverable_path(p), want)
+
+# 임시 자리는 «이름»이 아니라 구조로 본다 — 폴더를 뭐라 부르든 OS 임시 루트 아래면 임시다.
+# (첫 판은 `[Tt]e?mp` 정규식이었다. 그러면 임시 루트가 다른 이름일 때 뚫린다.)
+_tmproot = tempfile.gettempdir()
+check("자리 판정 — OS 임시 루트 아래(이름 무관)",
+      G.is_deliverable_path(os.path.join(_tmproot, "aZq9", "deck.pptx")), False)
+check("자리 판정 — 임시 루트 밖의 같은 이름",
+      G.is_deliverable_path(os.path.join("D:", "proj", "aZq9", "deck.pptx")), True)
 
 # 상한: MAX_FILES를 넘으면 자른다 (훅 지연 방지)
 many = []
@@ -98,7 +139,8 @@ finally:
 check("audit.py 경로 존재", os.path.exists(G.AUDIT), True)
 
 # ---- 결과 ---------------------------------------------------------------
-print("15 cases (8건은 «울리면 안 되는» 경우)")
+print("%d cases (그중 «자리 판정» %d건 — 2026-09-11 오발에서 나옴)"
+      % (len(ran), sum(1 for x in ran if x.startswith("자리 판정"))))
 if fails:
     print("  FAIL %d건" % len(fails))
     for f in fails:

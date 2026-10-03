@@ -1,52 +1,65 @@
 {
-  "_comment": [
-    "훅 배선의 정본. 2026-08-25까지 이 배선은 각 기계의 ~/.claude/settings.json 에만",
-    "있었고 버전관리 밖이었다 -- 기계가 죽으면 무엇이 걸려 있었는지 알 길이 없었다.",
-    "install.ps1 이 이 파일을 읽어 settings.json 에 «병합»한다(덮어쓰지 않는다).",
-    "훅을 새로 만들면 여기에도 한 줄 추가할 것. 안 하면 다른 기계에 안 걸린다."
-  ],
-  "hooks": [
-    {
-      "event": "UserPromptSubmit",
-      "matcher": null,
-      "runner": "node",
-      "script": "log-prompt-submit.js",
-      "why": "프롬프트 기록"
-    },
-    {
-      "event": "Stop",
-      "matcher": null,
-      "runner": "node",
-      "script": "log-stop-model.js",
-      "why": "응답 종료 시 모델 기록"
-    },
-    {
-      "event": "PostToolUse",
-      "matcher": "ExitPlanMode",
-      "runner": "node",
-      "script": "log-plan.js",
-      "why": "확정된 계획 보존"
-    },
-    {
-      "event": "PostToolUse",
-      "matcher": "Bash|Write|Edit",
-      "runner": "python",
-      "script": "deliverable_guard.py",
-      "why": "산출물(docx·pptx·hwpx)이 만들어지면 장르별 감사를 자동으로 돌린다"
-    },
-    {
-      "event": "PostToolUse",
-      "matcher": "Write|Edit",
-      "runner": "python",
-      "script": "docx_kit_guard.py",
-      "why": "python-docx로 문서를 «조립»하는데 docx-editing 스킬을 안 쓰면 알린다"
-    },
-    {
-      "event": "PreToolUse",
-      "matcher": "Bash",
-      "runner": "python",
-      "script": "heredoc_guard.py",
-      "why": "heredoc·`python -` 차단. 조용히 망가지거나 셸이 영원히 멈춘다"
-    }
-  ]
+ "_comment": [
+  "훅 배선의 정본. 2026-08-25까지 이 배선은 각 기계의 ~/.claude/settings.json 에만",
+  "있었고 버전관리 밖이었다 -- 기계가 죽으면 무엇이 걸려 있었는지 알 길이 없었다.",
+  "install.ps1 이 이 파일을 읽어 settings.json 에 «병합»한다(덮어쓰지 않는다).",
+  "훅을 새로 만들면 여기에도 한 줄 추가할 것. 안 하면 다른 기계에 안 걸린다."
+ ],
+ "hooks": [
+  {
+   "event": "UserPromptSubmit",
+   "matcher": null,
+   "runner": "node",
+   "script": "log-prompt-submit.js",
+   "why": "프롬프트 기록"
+  },
+  {
+   "event": "UserPromptSubmit",
+   "matcher": null,
+   "runner": "python",
+   "script": "prompt_guard.py",
+   "why": "지적받은 순간·「끝났나」를 물은 순간에 그 규칙 한 줄을 띄운다 (2026-09-11)"
+  },
+  {
+   "event": "Stop",
+   "matcher": null,
+   "runner": "node",
+   "script": "log-stop-model.js",
+   "why": "응답 종료 시 모델 기록"
+  },
+  {
+   "event": "Stop",
+   "matcher": null,
+   "runner": "python",
+   "script": "stop_claim_guard.py",
+   "why": "근거 없는 「자료가 없다」·「확인 부탁」을 한 번 되돌린다 — 「열어 본 곳:」 또는 「못 열었다」가 있으면 통과 (2026-09-26)"
+  },
+  {
+   "event": "PostToolUse",
+   "matcher": "ExitPlanMode",
+   "runner": "node",
+   "script": "log-plan.js",
+   "why": "확정된 계획 보존"
+  },
+  {
+   "event": "PreToolUse",
+   "matcher": "Bash|PowerShell",
+   "runner": "python",
+   "script": "dispatch.py",
+   "args": [
+    "PreToolUse"
+   ],
+   "why": "파이썬 가드 전부를 한 프로세스에서 — 표는 dispatch.py TABLE"
+  },
+  {
+   "event": "PostToolUse",
+   "matcher": "Bash|Write|Edit",
+   "runner": "python",
+   "script": "dispatch.py",
+   "args": [
+    "PostToolUse"
+   ],
+   "why": "파이썬 가드 전부를 한 프로세스에서 — 표는 dispatch.py TABLE"
+  }
+ ]
 }

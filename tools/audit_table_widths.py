@@ -21,7 +21,7 @@ Usage:
 실제로 보기 싫게 끊기는 건 `IMPALA` 한 구간뿐이다.
 → **판정: 순한글 지적은 무시하고, 라틴 글자나 숫자가 든 것만 고친다**
 (`(CASTLE)`이 `(CAST`/`LE)`로, `2024.12`가 `2024.1`/`2`로 갈리는 것이 진짜 결함).
-실측 2026-08-20 insaui4 결핵 케이스: 보고 6건 중 손볼 값이 있던 것은 3건.
+실측 2026-08-20 한 수업 과제 결핵 케이스: 보고 6건 중 손볼 값이 있던 것은 3건.
 """
 
 import argparse
@@ -102,14 +102,32 @@ def main():
     for t_i, tbl in enumerate(doc.tables, 1):
         widths = col_widths_in(tbl)
         for r_i, row in enumerate(tbl.rows, 1):
+            # ⚠️⚠️ **가로 병합된 셀은 «한 번»만, «합친 폭»으로 잰다.**
+            #    python-docx 의 row.cells 는 격자 열마다 한 항목을 돌려주므로, 네 열을
+            #    병합한 셀은 «네 번» 나오고 각각이 «한 열» 폭과 비교된다. 그러면 멀쩡히
+            #    걸쳐 있는 그룹 머리행이 매번 BREAK 로 신고된다 -- 렌더에서는 한 줄로
+            #    잘 나와 있는데도. (psy 2026-08-27: Table 3 의 "Outcome definition"·
+            #    "Confounding by treated depression" 이 그렇게 4건 잡혔다.)
+            #    같은 _tc 객체가 반복되는 것으로 병합을 알아낸다.
+            spans, seen = [], {}
             for c_i, cell in enumerate(row.cells):
+                key = id(cell._tc)
+                if key in seen:
+                    spans[seen[key]][2].append(c_i)
+                else:
+                    seen[key] = len(spans)
+                    spans.append((cell, c_i, [c_i]))
+
+            for cell, c_i, cols in spans:
                 text = cell.text.strip()
                 if not text:
                     continue
-                # 열 폭: gridCol 우선, 없으면 셀 자체 폭
+                # 열 폭: gridCol 우선, 없으면 셀 자체 폭. 병합이면 걸친 열을 «더한다».
                 w = None
-                if widths and c_i < len(widths):
-                    w = widths[c_i]
+                if widths:
+                    ws = [widths[i] for i in cols if i < len(widths) and widths[i]]
+                    if len(ws) == len(cols):
+                        w = sum(ws)
                 if w is None and cell.width is not None:
                     w = cell.width / EMU_PER_IN
                 if not w:

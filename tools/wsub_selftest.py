@@ -3,6 +3,7 @@
 
 Run:  python wsub_selftest.py       (exit 1 on any failure)
 """
+import ast
 import importlib.util
 import io
 import os
@@ -24,6 +25,15 @@ def check(name, cond, detail=""):
     else:
         FAIL.append(name)
         print("  FAIL %s  %s" % (name, detail))
+
+
+def _parses(text):
+    import ast
+    try:
+        ast.parse(text)
+        return True
+    except SyntaxError:
+        return False
 
 
 def tmpfile(text, suffix=".txt"):
@@ -98,7 +108,80 @@ p5 = tmpfile("hello world\n")
 W.Patcher(p5).sub("world", "def (", "no check on txt")
 check("non-py target skips the gate", "def (" in io.open(p5, encoding="utf-8").read())
 
-for f in (p1, p2, p3, p4, p5, script, script3, script4):
+# ------------------------------------------------------------------ sub_literal
+# 6. The motivating shape: prose split by implicit concatenation. sub() cannot reach it
+#    (a quote + newline + indent sit between the halves); sub_literal() can.
+BUILDER = (
+    "def build(doc):\n"
+    "    ans(doc, 'The evidence body starts at High '\n"
+    "             'because the design is randomised.')\n")
+p6 = tmpfile(BUILDER, suffix=".py")
+script6 = tmpfile("")
+io.open(script6, "w", encoding="utf-8").write(
+    "import sys\n"
+    "sys.path.insert(0, %r)\n" % HERE +
+    "from wsub import Patcher\n"
+    "Patcher(%r).sub('The evidence body starts at High because the design is randomised.',\n"
+    "                'X', 'via sub')\n" % p6)
+r6 = subprocess.run([sys.executable, script6], capture_output=True, text=True)
+check("sub() cannot reach implicit concatenation (that is why sub_literal exists)",
+      r6.returncode != 0 and "0 matches" in (r6.stdout + r6.stderr), (r6.stdout + r6.stderr)[-120:])
+
+pat6 = W.Patcher(p6)
+pat6.sub_literal("The evidence body starts at High because the design is randomised.",
+                 "The evidence body starts at High.", "shorten")
+got6 = io.open(p6, encoding="utf-8").read()
+check("sub_literal reaches it", "'The evidence body starts at High.'" in got6, repr(got6))
+check("sub_literal leaves the file parsing", "ans(doc," in got6 and got6.count("ans(") == 1,
+      repr(got6))
+
+# 7. Inside brackets a long replacement is re-wrapped, not left as one 300-column line.
+long_txt = " ".join(["word%02d" % i for i in range(40)])
+p7 = tmpfile("def f():\n    ans(doc, 'short')\n", suffix=".py")
+W.Patcher(p7).sub_literal("short", long_txt, "rewrap")
+got7 = io.open(p7, encoding="utf-8").read()
+check("long value is re-wrapped under 100 columns",
+      max(len(ln) for ln in got7.splitlines()) < 100,
+      "longest=%d" % max(len(ln) for ln in got7.splitlines()))
+_c7 = [n.value for n in ast.walk(ast.parse(got7)) if isinstance(n, ast.Constant)]
+check("re-wrapped literal still carries the same value", long_txt in _c7, repr(_c7)[:120])
+
+# 7b. OUTSIDE brackets it must stay on one line -- a split literal there is a SyntaxError, not a
+#     style problem. (Found by this selftest on 2026-08-31, before the tool was ever used.)
+p7b = tmpfile("def f():\n    t = 'short'\n    return t\n", suffix=".py")
+W.Patcher(p7b).sub_literal("short", long_txt, "no-wrap outside brackets")
+got7b = io.open(p7b, encoding="utf-8").read()
+check("outside brackets the literal is not split", got7b.count("'") == 2, repr(got7b[:120]))
+check("outside brackets the file still parses", _parses(got7b), repr(got7b[:120]))
+
+# 8. Two literals with the same value are refused -- same rule as sub().
+p8 = tmpfile("a = 'dup'\nb = 'dup'\n", suffix=".py")
+script8 = tmpfile("")
+io.open(script8, "w", encoding="utf-8").write(
+    "import sys\n"
+    "sys.path.insert(0, %r)\n" % HERE +
+    "from wsub import Patcher\n"
+    "Patcher(%r).sub_literal('dup', 'X', 'ambiguous')\n" % p8)
+r8 = subprocess.run([sys.executable, script8], capture_output=True, text=True)
+check("sub_literal refuses an ambiguous value",
+      r8.returncode != 0 and "2 matches" in (r8.stdout + r8.stderr), (r8.stdout + r8.stderr)[-120:])
+check("sub_literal changes nothing when ambiguous",
+      io.open(p8, encoding="utf-8").read() == "a = 'dup'\nb = 'dup'\n")
+
+# 9. A *substring* of a literal does not match -- whole values only, by design.
+p9 = tmpfile("a = 'alpha beta gamma'\n", suffix=".py")
+script9 = tmpfile("")
+io.open(script9, "w", encoding="utf-8").write(
+    "import sys\n"
+    "sys.path.insert(0, %r)\n" % HERE +
+    "from wsub import Patcher\n"
+    "Patcher(%r).sub_literal('beta', 'X', 'partial')\n" % p9)
+r9 = subprocess.run([sys.executable, script9], capture_output=True, text=True)
+check("sub_literal refuses a partial value (no guessing where to cut)",
+      r9.returncode != 0 and "0 matches" in (r9.stdout + r9.stderr), (r9.stdout + r9.stderr)[-120:])
+
+for f in (p1, p2, p3, p4, p5, p6, p7, p7b, p8, p9,
+          script, script3, script4, script6, script8, script9):
     try:
         os.remove(f)
     except OSError:
